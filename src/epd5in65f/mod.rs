@@ -61,6 +61,8 @@ where
         // Reset the device
         self.interface.reset(delay, 10_000, 2_000);
 
+        self.wait_until_idle(spi, delay)?;
+
         self.cmd_with_data(spi, Command::PanelSetting, &[0xEF, 0x08])?;
         self.cmd_with_data(spi, Command::PowerSetting, &[0x37, 0x00, 0x23, 0x23])?;
         self.cmd_with_data(spi, Command::PowerOffSequenceSetting, &[0x00])?;
