@@ -76,6 +76,30 @@ where
         Ok(())
     }
 
+    /// Basic function for sending u8-values with the provided generator.
+    ///
+    /// Intented for use with rendering from progmem buffers.
+    pub(crate) fn data_with(
+        &mut self,
+        spi: &mut SPI,
+        data: impl Fn(usize) -> u8,
+        len: usize,
+    ) -> Result<(), SPI::Error> {
+        // high for data
+        let _ = self.dc.set_high();
+
+        if SINGLE_BYTE_WRITE {
+            for i in 0..len {
+                // Transfer data one u8 at a time over spi
+                self.write(spi, &[data(i)])?;
+            }
+        } else {
+            unimplemented!();
+        }
+
+        Ok(())
+    }
+
     /// Basic function for sending [Commands](Command) and the data belonging to it.
     ///
     /// TODO: directly use ::write? cs wouldn't needed to be changed twice than
