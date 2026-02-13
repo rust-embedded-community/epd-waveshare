@@ -28,7 +28,7 @@ mod command;
 pub type Display7in3f = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize * 4) },
     OctColor,
 >;

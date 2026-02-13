@@ -78,7 +78,7 @@ const SINGLE_BYTE_WRITE: bool = true;
 pub type Display2in13b = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize) * 2 },
     TriColor,
 >;

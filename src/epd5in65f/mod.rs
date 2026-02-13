@@ -25,7 +25,7 @@ use crate::buffer_len;
 pub type Display5in65f = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize * 4) },
     OctColor,
 >;

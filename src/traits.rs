@@ -290,7 +290,7 @@ where
 ///let (x, y, frame_width, frame_height) = (20, 40, 80,80);
 ///
 ///let mut buffer = [DEFAULT_BACKGROUND_COLOR.get_byte_value(); 80 / 8 * 80];
-///let mut display = VarDisplay::new(frame_width, frame_height, &mut buffer,false).unwrap();
+///let mut display = VarDisplay::new(frame_width, frame_height, &mut buffer, DisplayMode::BwrBitOff as u8).unwrap();
 ///
 ///epd.update_partial_old_frame(&mut spi, &mut delay, display.buffer(), x, y, frame_width, frame_height)
 ///  .ok();

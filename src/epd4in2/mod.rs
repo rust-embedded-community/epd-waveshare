@@ -55,7 +55,7 @@ use crate::interface::DisplayInterface;
 use crate::traits::{InternalWiAdditions, QuickRefresh, RefreshLut, WaveshareDisplay};
 
 //The Lookup Tables for the Display
-mod constants;
+pub mod constants;
 use crate::epd4in2::constants::*;
 
 /// Width of the display
@@ -78,7 +78,7 @@ use crate::buffer_len;
 pub type Display4in2 = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize) },
     Color,
 >;

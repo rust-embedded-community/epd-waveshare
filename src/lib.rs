@@ -94,6 +94,7 @@ pub mod epd2in9bc;
 pub mod epd2in9d;
 pub mod epd3in7;
 pub mod epd4in2;
+pub mod epd4in2bc;
 pub mod epd5in65f;
 pub mod epd5in83_v2;
 pub mod epd5in83b_v2;
@@ -117,7 +118,7 @@ pub mod prelude {
     pub use crate::SPI_MODE;
 
     #[cfg(feature = "graphics")]
-    pub use crate::graphics::{Display, DisplayRotation};
+    pub use crate::graphics::{Display, DisplayMode, DisplayRotation};
 }
 
 /// Computes the needed buffer length. Takes care of rounding up in case width

@@ -197,7 +197,7 @@ pub const DEFAULT_BACKGROUND_COLOR: TriColor = TriColor::White;
 pub type Display2in66b = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize) * 2 },
     TriColor,
 >;

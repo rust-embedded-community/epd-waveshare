@@ -34,7 +34,7 @@ use crate::buffer_len;
 pub type Display2in7b = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize) },
     Color,
 >;

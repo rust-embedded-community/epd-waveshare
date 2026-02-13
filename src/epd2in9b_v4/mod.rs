@@ -35,7 +35,7 @@ const IS_BUSY_LOW: bool = false;
 pub type Display2in9b = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    true,
+    { crate::graphics::DisplayMode::BwrBitOn as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize * 2) },
     TriColor,
 >;

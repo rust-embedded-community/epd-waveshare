@@ -73,7 +73,7 @@ use crate::interface::DisplayInterface;
 pub type Display1in54 = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    false,
+    { crate::graphics::DisplayMode::BwrBitOff as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize) },
     Color,
 >;

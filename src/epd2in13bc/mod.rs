@@ -86,7 +86,7 @@ use crate::buffer_len;
 pub type Display2in13bc = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    true,
+    { crate::graphics::DisplayMode::BwrBitOn as u8 },
     { buffer_len(WIDTH as usize, HEIGHT as usize * 2) },
     TriColor,
 >;
