@@ -166,14 +166,10 @@
 //!}
 //!```
 
-use embedded_hal::{
-    delay::DelayNs,
-    digital::{InputPin, OutputPin},
-    spi::SpiDevice,
-};
+use embedded_hal::digital::{InputPin, OutputPin};
 
 use crate::color::TriColor;
-use crate::interface::DisplayInterface;
+use crate::interface::{DelayNs, DisplayInterface, SpiDevice};
 use crate::traits::{
     InternalWiAdditions, RefreshLut, WaveshareDisplay, WaveshareThreeColorDisplay,
 };
@@ -208,6 +204,7 @@ pub struct Epd2in66b<SPI, BUSY, DC, RST, DELAY> {
     background: TriColor,
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for Epd2in66b<SPI, BUSY, DC, RST, DELAY>
 where
@@ -217,24 +214,28 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // We follow the sequence of the Pi-Pico hat example code.
-        self.hw_reset(delay)?;
-        self.sw_reset(spi, delay)?;
-        self.data_entry_mode(spi, DataEntryRow::XMinor, DataEntrySign::IncYIncX)?;
-        self.set_display_window(spi, 0, 0, WIDTH - 1, HEIGHT - 1)?;
+        self.hw_reset(delay).await?;
+        self.sw_reset(spi, delay).await?;
+        self.data_entry_mode(spi, DataEntryRow::XMinor, DataEntrySign::IncYIncX)
+            .await?;
+        self.set_display_window(spi, 0, 0, WIDTH - 1, HEIGHT - 1)
+            .await?;
         self.update_control1(
             spi,
             WriteMode::Normal,
             WriteMode::Normal,
             OutputSource::S8ToS167,
-        )?;
-        self.set_cursor(spi, 0, 0)?;
+        )
+        .await?;
+        self.set_cursor(spi, 0, 0).await?;
 
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareThreeColorDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in66b<SPI, BUSY, DC, RST, DELAY>
 where
@@ -244,40 +245,41 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn update_color_frame(
+    async fn update_color_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
         black: &[u8],
         chromatic: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.update_achromatic_frame(spi, delay, black)?;
-        self.update_chromatic_frame(spi, delay, chromatic)
+        self.update_achromatic_frame(spi, delay, black).await?;
+        self.update_chromatic_frame(spi, delay, chromatic).await
     }
 
-    fn update_achromatic_frame(
+    async fn update_achromatic_frame(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
         black: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.set_cursor(spi, 0, 0)?;
-        self.interface.cmd(spi, Command::WriteBlackWhiteRAM)?;
-        self.interface.data(spi, black)
+        self.set_cursor(spi, 0, 0).await?;
+        self.interface.cmd(spi, Command::WriteBlackWhiteRAM).await?;
+        self.interface.data(spi, black).await
     }
 
-    fn update_chromatic_frame(
+    async fn update_chromatic_frame(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
         chromatic: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.set_cursor(spi, 0, 0)?;
-        self.interface.cmd(spi, Command::WriteRedRAM)?;
-        self.interface.data(spi, chromatic)
+        self.set_cursor(spi, 0, 0).await?;
+        self.interface.cmd(spi, Command::WriteRedRAM).await?;
+        self.interface.data(spi, chromatic).await
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in66b<SPI, BUSY, DC, RST, DELAY>
 where
@@ -289,7 +291,7 @@ where
 {
     type DisplayColor = TriColor;
 
-    fn new(
+    async fn new(
         spi: &mut SPI,
         busy: BUSY,
         dc: DC,
@@ -304,20 +306,22 @@ where
             interface: DisplayInterface::new(busy, dc, rst, delay_us),
             background: DEFAULT_BACKGROUND_COLOR,
         };
-        epd.init(spi, delay)?;
+        epd.init(spi, delay).await?;
         Ok(epd)
     }
 
-    fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(
-            spi,
-            Command::DeepSleepMode,
-            &[DeepSleep::SleepLosingRAM as u8],
-        )
+    async fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::DeepSleepMode,
+                &[DeepSleep::SleepLosingRAM as u8],
+            )
+            .await
     }
 
-    fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.init(spi, delay)
+    async fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.init(spi, delay).await
     }
 
     fn set_background_color(&mut self, color: Self::DisplayColor) {
@@ -336,18 +340,19 @@ where
         HEIGHT
     }
 
-    fn update_frame(
+    async fn update_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.set_cursor(spi, 0, 0)?;
-        self.update_achromatic_frame(spi, delay, buffer)?;
-        self.red_pattern(spi, delay, PatW::W160, PatH::H296, StartWith::Zero) // do NOT consider background here since red overrides other colors
+        self.set_cursor(spi, 0, 0).await?;
+        self.update_achromatic_frame(spi, delay, buffer).await?;
+        self.red_pattern(spi, delay, PatW::W160, PatH::H296, StartWith::Zero)
+            .await // do NOT consider background here since red overrides other colors
     }
 
-    fn update_partial_frame(
+    async fn update_partial_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -357,38 +362,41 @@ where
         width: u32,
         height: u32,
     ) -> Result<(), SPI::Error> {
-        self.set_display_window(spi, x, y, x + width, y + height)?;
-        self.set_cursor(spi, x, y)?;
-        self.update_achromatic_frame(spi, delay, buffer)?;
-        self.set_display_window(spi, 0, 0, WIDTH, HEIGHT)
+        self.set_display_window(spi, x, y, x + width, y + height)
+            .await?;
+        self.set_cursor(spi, x, y).await?;
+        self.update_achromatic_frame(spi, delay, buffer).await?;
+        self.set_display_window(spi, 0, 0, WIDTH, HEIGHT).await
     }
 
-    fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::MasterActivation)?;
-        self.wait_until_idle(delay)
+    async fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, Command::MasterActivation).await?;
+        self.wait_until_idle(delay).await
     }
 
-    fn update_and_display_frame(
+    async fn update_and_display_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.update_frame(spi, buffer, delay)?;
-        self.display_frame(spi, delay)
+        self.update_frame(spi, buffer, delay).await?;
+        self.display_frame(spi, delay).await
     }
 
-    fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         let (white, red) = match self.background {
             TriColor::Black => (StartWith::Zero, StartWith::Zero),
             TriColor::White => (StartWith::One, StartWith::Zero),
             TriColor::Chromatic => (StartWith::Zero, StartWith::One),
         };
-        self.black_white_pattern(spi, delay, PatW::W160, PatH::H296, white)?;
+        self.black_white_pattern(spi, delay, PatW::W160, PatH::H296, white)
+            .await?;
         self.red_pattern(spi, delay, PatW::W160, PatH::H296, red)
+            .await
     }
 
-    fn set_lut(
+    async fn set_lut(
         &mut self,
         _spi: &mut SPI,
         _delay: &mut DELAY,
@@ -397,12 +405,17 @@ where
         Ok(())
     }
 
-    fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(delay)
+    async fn wait_until_idle(
+        &mut self,
+        _spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        self.wait_until_idle(delay).await
     }
 }
 
 // Helper functions that enforce some type and value constraints. Meant to help with code readability. They caught some of my silly errors -> yay rust!.
+#[maybe_async::maybe_async]
 impl<SPI, BUSY, DC, RST, DELAY> Epd2in66b<SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
@@ -411,20 +424,20 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn wait_until_idle(&mut self, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.wait_until_idle(delay, false);
+    async fn wait_until_idle(&mut self, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.interface.wait_until_idle(delay, false).await;
         Ok(())
     }
-    fn hw_reset(&mut self, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn hw_reset(&mut self, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // The initial delay is taken from other code here, the 2 ms comes from the SSD1675B datasheet.
-        self.interface.reset(delay, 20_000, 2_000);
-        self.wait_until_idle(delay)
+        self.interface.reset(delay, 20_000, 2_000).await;
+        self.wait_until_idle(delay).await
     }
-    fn sw_reset(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::Reset)?;
-        self.wait_until_idle(delay)
+    async fn sw_reset(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, Command::Reset).await?;
+        self.wait_until_idle(delay).await
     }
-    fn data_entry_mode(
+    async fn data_entry_mode(
         &mut self,
         spi: &mut SPI,
         row: DataEntryRow,
@@ -432,8 +445,9 @@ where
     ) -> Result<(), SPI::Error> {
         self.interface
             .cmd_with_data(spi, Command::DataEntryMode, &[row as u8 | sign as u8])
+            .await
     }
-    fn set_display_window(
+    async fn set_display_window(
         &mut self,
         spi: &mut SPI,
         xstart: u32,
@@ -441,50 +455,56 @@ where
         xend: u32,
         yend: u32,
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetXAddressRange,
-            &[(((xstart >> 3) & 0x1f) as u8), (((xend >> 3) & 0x1f) as u8)],
-        )?;
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetYAddressRange,
-            &[
-                ((ystart & 0xff) as u8),
-                (((ystart >> 8) & 0x01) as u8),
-                ((yend & 0xff) as u8),
-                (((yend >> 8) & 0x01) as u8),
-            ],
-        )
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetXAddressRange,
+                &[(((xstart >> 3) & 0x1f) as u8), (((xend >> 3) & 0x1f) as u8)],
+            )
+            .await?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetYAddressRange,
+                &[
+                    ((ystart & 0xff) as u8),
+                    (((ystart >> 8) & 0x01) as u8),
+                    ((yend & 0xff) as u8),
+                    (((yend >> 8) & 0x01) as u8),
+                ],
+            )
+            .await
     }
-    fn update_control1(
+    async fn update_control1(
         &mut self,
         spi: &mut SPI,
         red_mode: WriteMode,
         bw_mode: WriteMode,
         source: OutputSource,
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(
-            spi,
-            Command::DisplayUpdateControl1,
-            &[((red_mode as u8) << 4 | bw_mode as u8), (source as u8)],
-        )
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::DisplayUpdateControl1,
+                &[((red_mode as u8) << 4 | bw_mode as u8), (source as u8)],
+            )
+            .await
     }
 
-    fn set_cursor(&mut self, spi: &mut SPI, x: u32, y: u32) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetXAddressCounter,
-            &[((x >> 3) & 0x1f) as u8],
-        )?;
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetYAddressCounter,
-            &[((y & 0xff) as u8), (((y >> 8) & 0x01) as u8)],
-        )
+    async fn set_cursor(&mut self, spi: &mut SPI, x: u32, y: u32) -> Result<(), SPI::Error> {
+        self.interface
+            .cmd_with_data(spi, Command::SetXAddressCounter, &[((x >> 3) & 0x1f) as u8])
+            .await?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetYAddressCounter,
+                &[((y & 0xff) as u8), (((y >> 8) & 0x01) as u8)],
+            )
+            .await
     }
 
-    fn black_white_pattern(
+    async fn black_white_pattern(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -492,14 +512,16 @@ where
         h: PatH,
         phase: StartWith,
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(
-            spi,
-            Command::BlackWhiteRAMTestPattern,
-            &[phase as u8 | h as u8 | w as u8],
-        )?;
-        self.wait_until_idle(delay)
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::BlackWhiteRAMTestPattern,
+                &[phase as u8 | h as u8 | w as u8],
+            )
+            .await?;
+        self.wait_until_idle(delay).await
     }
-    fn red_pattern(
+    async fn red_pattern(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -507,11 +529,13 @@ where
         h: PatH,
         phase: StartWith,
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(
-            spi,
-            Command::RedRAMTestPattern,
-            &[phase as u8 | h as u8 | w as u8],
-        )?;
-        self.wait_until_idle(delay)
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::RedRAMTestPattern,
+                &[phase as u8 | h as u8 | w as u8],
+            )
+            .await?;
+        self.wait_until_idle(delay).await
     }
 }

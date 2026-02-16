@@ -49,6 +49,14 @@
 //!# }
 //!```
 //!
+//! # Async Support
+//!
+//! Enabling the `async` feature will switch all relevant functions in the API to async functions.
+//!
+//! Additionally the Delay and Spi traits from [`embedded-hal-async`] will be used.
+//!
+//! [`embedded-hal-async`]: https://docs.rs/embedded-hal-async
+//!
 //! # Other information and requirements
 //!
 //! - Buffersize: Wherever a buffer is used it always needs to be of the size: `width / 8 * length`,

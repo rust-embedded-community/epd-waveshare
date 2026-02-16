@@ -4,14 +4,10 @@
 //!
 //! The display controller IC is UC8175
 
-use embedded_hal::{
-    delay::DelayNs,
-    digital::{InputPin, OutputPin},
-    spi::SpiDevice,
-};
+use embedded_hal::digital::{InputPin, OutputPin};
 
 use crate::color::Color;
-use crate::interface::DisplayInterface;
+use crate::interface::{DelayNs, DisplayInterface, SpiDevice};
 use crate::prelude::WaveshareDisplay;
 use crate::traits::{InternalWiAdditions, QuickRefresh, RefreshLut};
 
@@ -58,6 +54,7 @@ pub struct Epd1in02<SPI, BUSY, DC, RST, DELAY> {
     refresh_mode: RefreshLut,
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd1in02<SPI, BUSY, DC, RST, DELAY>
 where
@@ -69,7 +66,7 @@ where
 {
     type DisplayColor = Color;
 
-    fn new(
+    async fn new(
         spi: &mut SPI,
         busy: BUSY,
         dc: DC,
@@ -87,15 +84,15 @@ where
             refresh_mode: RefreshLut::Full,
         };
 
-        epd.init(spi, delay)?;
+        epd.init(spi, delay).await?;
 
         Ok(epd)
     }
 
-    fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.turn_off(spi, delay)?;
-        self.cmd_with_data(spi, Command::DeepSleep, &[0xA5])?;
+    async fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.wait_until_idle(spi, delay).await?;
+        self.turn_off(spi, delay).await?;
+        self.cmd_with_data(spi, Command::DeepSleep, &[0xA5]).await?;
 
         // display registers are set to default value
         self.refresh_mode = RefreshLut::Full;
@@ -103,8 +100,8 @@ where
         Ok(())
     }
 
-    fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.init(spi, delay)
+    async fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.init(spi, delay).await
     }
 
     fn set_background_color(&mut self, color: Color) {
@@ -123,29 +120,31 @@ where
         HEIGHT
     }
 
-    fn update_frame(
+    async fn update_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
 
-        self.set_full_mode(spi, delay)?;
+        self.set_full_mode(spi, delay).await?;
 
         let color_value = self.background_color().get_byte_value();
 
-        self.command(spi, Command::DataStartTransmission1)?;
+        self.command(spi, Command::DataStartTransmission1).await?;
         self.interface
-            .data_x_times(spi, color_value, NUMBER_OF_BYTES)?;
+            .data_x_times(spi, color_value, NUMBER_OF_BYTES)
+            .await?;
 
-        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)?;
+        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)
+            .await?;
         Ok(())
     }
 
     // Implemented as quick partial update
     // as it requires old frame update
-    fn update_partial_frame(
+    async fn update_partial_frame(
         &mut self,
         _spi: &mut SPI,
         _delay: &mut DELAY,
@@ -158,44 +157,46 @@ where
         unimplemented!()
     }
 
-    fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.turn_on_if_turned_off(spi, delay)?;
+    async fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.wait_until_idle(spi, delay).await?;
+        self.turn_on_if_turned_off(spi, delay).await?;
 
-        self.command(spi, Command::DisplayRefresh)?;
-        self.wait_until_idle(spi, delay)?;
+        self.command(spi, Command::DisplayRefresh).await?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 
-    fn update_and_display_frame(
+    async fn update_and_display_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.update_frame(spi, buffer, delay)?;
-        self.display_frame(spi, delay)?;
+        self.update_frame(spi, buffer, delay).await?;
+        self.display_frame(spi, delay).await?;
         Ok(())
     }
 
-    fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.set_full_mode(spi, delay)?;
+    async fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.wait_until_idle(spi, delay).await?;
+        self.set_full_mode(spi, delay).await?;
 
         let color_value = self.background_color().get_byte_value();
 
-        self.command(spi, Command::DataStartTransmission1)?;
+        self.command(spi, Command::DataStartTransmission1).await?;
         self.interface
-            .data_x_times(spi, !color_value, NUMBER_OF_BYTES)?;
+            .data_x_times(spi, !color_value, NUMBER_OF_BYTES)
+            .await?;
 
-        self.command(spi, Command::DataStartTransmission2)?;
+        self.command(spi, Command::DataStartTransmission2).await?;
         self.interface
-            .data_x_times(spi, color_value, NUMBER_OF_BYTES)?;
+            .data_x_times(spi, color_value, NUMBER_OF_BYTES)
+            .await?;
 
         Ok(())
     }
 
-    fn set_lut(
+    async fn set_lut(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
@@ -207,17 +208,24 @@ where
             None => return Ok(()),
         };
 
-        self.cmd_with_data(spi, Command::SetWhiteLut, white_lut)?;
-        self.cmd_with_data(spi, Command::SetBlackLut, black_lut)?;
+        self.cmd_with_data(spi, Command::SetWhiteLut, white_lut)
+            .await?;
+        self.cmd_with_data(spi, Command::SetBlackLut, black_lut)
+            .await?;
         Ok(())
     }
 
-    fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+    async fn wait_until_idle(
+        &mut self,
+        _spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> QuickRefresh<SPI, BUSY, DC, RST, DELAY>
     for Epd1in02<SPI, BUSY, DC, RST, DELAY>
 where
@@ -228,35 +236,42 @@ where
     DELAY: DelayNs,
 {
     /// To be followed immediately by update_new_frame
-    fn update_old_frame(
+    async fn update_old_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.set_partial_mode(spi, delay)?;
-        self.set_partial_window(spi, delay, 0, 0, WIDTH, HEIGHT)?;
+        self.set_partial_mode(spi, delay).await?;
+        self.set_partial_window(spi, delay, 0, 0, WIDTH, HEIGHT)
+            .await?;
 
-        self.cmd_with_data(spi, Command::DataStartTransmission1, buffer)?;
+        self.cmd_with_data(spi, Command::DataStartTransmission1, buffer)
+            .await?;
         Ok(())
     }
 
     /// To be used immediately after update_old_frame
-    fn update_new_frame(
+    async fn update_new_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         _delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)?;
+        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)
+            .await?;
         Ok(())
     }
 
-    fn display_new_frame(&mut self, _spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn display_new_frame(
+        &mut self,
+        _spi: &mut SPI,
+        _delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
         unimplemented!()
     }
 
-    fn update_and_display_new_frame(
+    async fn update_and_display_new_frame(
         &mut self,
         _spi: &mut SPI,
         _buffer: &[u8],
@@ -267,7 +282,7 @@ where
 
     /// To be followed immediately by update_partial_new_frame
     /// isn't faster then full update
-    fn update_partial_old_frame(
+    async fn update_partial_old_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -281,15 +296,17 @@ where
             panic!("Image buffer size is not correct")
         }
 
-        self.set_partial_mode(spi, delay)?;
-        self.set_partial_window(spi, delay, x, y, width, height)?;
+        self.set_partial_mode(spi, delay).await?;
+        self.set_partial_window(spi, delay, x, y, width, height)
+            .await?;
 
-        self.cmd_with_data(spi, Command::DataStartTransmission1, buffer)?;
+        self.cmd_with_data(spi, Command::DataStartTransmission1, buffer)
+            .await?;
         Ok(())
     }
 
     /// To be used immediately after update_partial_old_frame
-    fn update_partial_new_frame(
+    async fn update_partial_new_frame(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
@@ -303,12 +320,13 @@ where
             panic!("Image buffer size is not correct")
         }
 
-        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)?;
+        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)
+            .await?;
         Ok(())
     }
 
     /// Isn't faster then full clear
-    fn clear_partial_frame(
+    async fn clear_partial_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -317,29 +335,33 @@ where
         width: u32,
         height: u32,
     ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         // set full LUT as quick LUT requires old image
-        self.set_full_mode(spi, delay)?;
-        self.command(spi, Command::PartialIn)?;
-        self.set_partial_window(spi, delay, x, y, width, height)?;
+        self.set_full_mode(spi, delay).await?;
+        self.command(spi, Command::PartialIn).await?;
+        self.set_partial_window(spi, delay, x, y, width, height)
+            .await?;
 
         let color_value = self.background_color().get_byte_value();
         let number_of_bytes = buffer_len(width as usize, height as usize) as u32;
 
-        self.command(spi, Command::DataStartTransmission1)?;
+        self.command(spi, Command::DataStartTransmission1).await?;
         self.interface
-            .data_x_times(spi, !color_value, number_of_bytes)?;
+            .data_x_times(spi, !color_value, number_of_bytes)
+            .await?;
 
-        self.command(spi, Command::DataStartTransmission2)?;
+        self.command(spi, Command::DataStartTransmission2).await?;
         self.interface
-            .data_x_times(spi, color_value, number_of_bytes)?;
+            .data_x_times(spi, color_value, number_of_bytes)
+            .await?;
 
-        self.command(spi, Command::PartialOut)?;
+        self.command(spi, Command::PartialOut).await?;
 
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for Epd1in02<SPI, BUSY, DC, RST, DELAY>
 where
@@ -349,24 +371,29 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // Reset the device
-        self.interface.reset(delay, 20_000, 2000);
+        self.interface.reset(delay, 20_000, 2000).await;
 
         // Set the panel settings: LUT from register
-        self.cmd_with_data(spi, Command::PanelSetting, &[0x6F])?;
+        self.cmd_with_data(spi, Command::PanelSetting, &[0x6F])
+            .await?;
 
         // Set the power settings: VGH=16V, VGL=-16V, VDH=11V, VDL=-11V
-        self.cmd_with_data(spi, Command::PowerSetting, &[0x03, 0x00, 0x2b, 0x2b])?;
+        self.cmd_with_data(spi, Command::PowerSetting, &[0x03, 0x00, 0x2b, 0x2b])
+            .await?;
 
         // Set the charge pump settings: 50ms, Strength 4, 8kHz
-        self.cmd_with_data(spi, Command::ChargePumpSetting, &[0x3F])?;
+        self.cmd_with_data(spi, Command::ChargePumpSetting, &[0x3F])
+            .await?;
 
         // Set LUT option: no All-Gate-ON
-        self.cmd_with_data(spi, Command::LutOption, &[0x00, 0x00])?;
+        self.cmd_with_data(spi, Command::LutOption, &[0x00, 0x00])
+            .await?;
 
         // Set the clock frequency: 50 Hz
-        self.cmd_with_data(spi, Command::PllControl, &[0x17])?;
+        self.cmd_with_data(spi, Command::PllControl, &[0x17])
+            .await?;
 
         // Set Vcom and data interval: default
         // set the border color the same as background color
@@ -374,27 +401,32 @@ where
             Color::Black => 0x57,
             Color::White => 0x97,
         };
-        self.cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[value])?;
+        self.cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[value])
+            .await?;
 
         // Set the non-overlapping period of Gate and Source: 24us
-        self.cmd_with_data(spi, Command::TconSetting, &[0x22])?;
+        self.cmd_with_data(spi, Command::TconSetting, &[0x22])
+            .await?;
 
         // Set the real resolution
-        self.send_resolution(spi)?;
+        self.send_resolution(spi).await?;
 
         // Set Vcom DC value: -1 V
-        self.cmd_with_data(spi, Command::VcomDcSetting, &[0x12])?;
+        self.cmd_with_data(spi, Command::VcomDcSetting, &[0x12])
+            .await?;
 
         // Set pover saving settings
-        self.cmd_with_data(spi, Command::PowerSaving, &[0x33])?;
+        self.cmd_with_data(spi, Command::PowerSaving, &[0x33])
+            .await?;
 
-        self.set_lut(spi, delay, Some(self.refresh_mode))?;
+        self.set_lut(spi, delay, Some(self.refresh_mode)).await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async]
 impl<SPI, BUSY, DC, RST, DELAY> Epd1in02<SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
@@ -403,72 +435,76 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, command)
+    async fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, command).await
     }
 
-    fn send_data(&mut self, spi: &mut SPI, data: &[u8]) -> Result<(), SPI::Error> {
-        self.interface.data(spi, data)
+    async fn send_data(&mut self, spi: &mut SPI, data: &[u8]) -> Result<(), SPI::Error> {
+        self.interface.data(spi, data).await
     }
 
-    fn cmd_with_data(
+    async fn cmd_with_data(
         &mut self,
         spi: &mut SPI,
         command: Command,
         data: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(spi, command, data)
+        self.interface.cmd_with_data(spi, command, data).await
     }
 
-    fn send_resolution(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
+    async fn send_resolution(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
         let w = self.width();
         let h = self.height();
 
-        self.command(spi, Command::TconResolution)?;
-        self.send_data(spi, &[h as u8])?;
-        self.send_data(spi, &[w as u8])
+        self.command(spi, Command::TconResolution).await?;
+        self.send_data(spi, &[h as u8]).await?;
+        self.send_data(spi, &[w as u8]).await
     }
 
     /// PowerOn command
-    fn turn_on_if_turned_off(
+    async fn turn_on_if_turned_off(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
         if !self.is_turned_on {
-            self.command(spi, Command::PowerOn)?;
-            self.wait_until_idle(spi, delay)?;
+            self.command(spi, Command::PowerOn).await?;
+            self.wait_until_idle(spi, delay).await?;
             self.is_turned_on = true;
         }
         Ok(())
     }
 
-    fn turn_off(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.command(spi, Command::PowerOff)?;
-        self.wait_until_idle(spi, delay)?;
+    async fn turn_off(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.command(spi, Command::PowerOff).await?;
+        self.wait_until_idle(spi, delay).await?;
         self.is_turned_on = false;
         Ok(())
     }
 
-    fn set_full_mode(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn set_full_mode(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         if self.refresh_mode != RefreshLut::Full {
-            self.command(spi, Command::PartialOut)?;
-            self.set_lut(spi, delay, Some(RefreshLut::Full))?;
+            self.command(spi, Command::PartialOut).await?;
+            self.set_lut(spi, delay, Some(RefreshLut::Full)).await?;
             self.refresh_mode = RefreshLut::Full;
         }
         Ok(())
     }
 
-    fn set_partial_mode(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn set_partial_mode(
+        &mut self,
+        spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
         if self.refresh_mode != RefreshLut::Quick {
-            self.command(spi, Command::PartialIn)?;
-            self.set_lut(spi, delay, Some(RefreshLut::Quick))?;
+            self.command(spi, Command::PartialIn).await?;
+            self.set_lut(spi, delay, Some(RefreshLut::Quick)).await?;
             self.refresh_mode = RefreshLut::Quick;
         }
         Ok(())
     }
 
-    fn set_partial_window(
+    async fn set_partial_window(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
@@ -491,7 +527,8 @@ where
                 (y + height - 1) as u8,
                 0x00,
             ],
-        )?;
+        )
+        .await?;
 
         Ok(())
     }

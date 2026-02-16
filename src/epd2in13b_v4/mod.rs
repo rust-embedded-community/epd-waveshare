@@ -51,15 +51,11 @@
 //!# }
 //!```
 // Original Waveforms from Waveshare
-use embedded_hal::{
-    delay::DelayNs,
-    digital::{InputPin, OutputPin},
-    spi::SpiDevice,
-};
+use embedded_hal::digital::{InputPin, OutputPin};
 
 use crate::buffer_len;
 use crate::color::TriColor;
-use crate::interface::DisplayInterface;
+use crate::interface::{DelayNs, DisplayInterface, SpiDevice};
 use crate::traits::{
     InternalWiAdditions, RefreshLut, WaveshareDisplay, WaveshareThreeColorDisplay,
 };
@@ -102,6 +98,7 @@ pub struct Epd2in13b<SPI, BUSY, DC, RST, DELAY> {
     background_color: TriColor,
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for Epd2in13b<SPI, BUSY, DC, RST, DELAY>
 where
@@ -111,13 +108,13 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // HW reset
-        self.interface.reset(delay, 10_000, 10_000);
+        self.interface.reset(delay, 10_000, 10_000).await;
 
-        self.wait_until_idle(spi, delay)?;
-        self.interface.cmd(spi, Command::SwReset)?;
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
+        self.interface.cmd(spi, Command::SwReset).await?;
+        self.wait_until_idle(spi, delay).await?;
 
         self.set_driver_output(
             spi,
@@ -127,13 +124,15 @@ where
                 scan_dir_incr: true,
                 width: (HEIGHT - 1) as u16,
             },
-        )?;
+        )
+        .await?;
 
-        self.set_data_entry_mode(spi, DataEntryModeIncr::XIncrYIncr, DataEntryModeDir::XDir)?;
+        self.set_data_entry_mode(spi, DataEntryModeIncr::XIncrYIncr, DataEntryModeDir::XDir)
+            .await?;
 
         // Use simple X/Y auto increase
-        self.set_ram_area(spi, 0, 0, WIDTH - 1, HEIGHT - 1)?;
-        self.set_ram_address_counters(spi, delay, 0, 0)?;
+        self.set_ram_area(spi, 0, 0, WIDTH - 1, HEIGHT - 1).await?;
+        self.set_ram_address_counters(spi, delay, 0, 0).await?;
 
         self.set_border_waveform(
             spi,
@@ -142,11 +141,15 @@ where
                 fix_level: BorderWaveFormFixLevel::Vss,
                 gs_trans: BorderWaveFormGs::Lut3,
             },
-        )?;
+        )
+        .await?;
 
-        self.cmd_with_data(spi, Command::WriteVcomRegister, &[0x36])?;
-        self.cmd_with_data(spi, Command::GateDrivingVoltageCtrl, &[0x17])?;
-        self.cmd_with_data(spi, Command::SourceDrivingVoltageCtrl, &[0x41, 0x00, 0x32])?;
+        self.cmd_with_data(spi, Command::WriteVcomRegister, &[0x36])
+            .await?;
+        self.cmd_with_data(spi, Command::GateDrivingVoltageCtrl, &[0x17])
+            .await?;
+        self.cmd_with_data(spi, Command::SourceDrivingVoltageCtrl, &[0x41, 0x00, 0x32])
+            .await?;
 
         self.set_display_update_control(
             spi,
@@ -155,14 +158,16 @@ where
                 bw_ram_option: RamOption::Normal,
                 source_output_mode: true,
             },
-        )?;
+        )
+        .await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
 
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareThreeColorDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in13b<SPI, BUSY, DC, RST, DELAY>
 where
@@ -172,40 +177,41 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn update_color_frame(
+    async fn update_color_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
         black: &[u8],
         chromatic: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.update_achromatic_frame(spi, delay, black)?;
-        self.update_chromatic_frame(spi, delay, chromatic)
+        self.update_achromatic_frame(spi, delay, black).await?;
+        self.update_chromatic_frame(spi, delay, chromatic).await
     }
 
-    fn update_achromatic_frame(
+    async fn update_achromatic_frame(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
         black: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::WriteRam)?;
-        self.interface.data(spi, black)?;
+        self.interface.cmd(spi, Command::WriteRam).await?;
+        self.interface.data(spi, black).await?;
         Ok(())
     }
 
-    fn update_chromatic_frame(
+    async fn update_chromatic_frame(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
         chromatic: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::WriteRamRed)?;
-        self.interface.data(spi, chromatic)?;
+        self.interface.cmd(spi, Command::WriteRamRed).await?;
+        self.interface.data(spi, chromatic).await?;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in13b<SPI, BUSY, DC, RST, DELAY>
 where
@@ -216,7 +222,7 @@ where
     DELAY: DelayNs,
 {
     type DisplayColor = TriColor;
-    fn new(
+    async fn new(
         spi: &mut SPI,
         busy: BUSY,
         dc: DC,
@@ -229,38 +235,40 @@ where
             background_color: DEFAULT_BACKGROUND_COLOR,
         };
 
-        epd.init(spi, delay)?;
+        epd.init(spi, delay).await?;
         Ok(epd)
     }
 
-    fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.init(spi, delay)
+    async fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.init(spi, delay).await
     }
 
-    fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.set_sleep_mode(spi, DeepSleepMode::Normal)?;
+    async fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.set_sleep_mode(spi, DeepSleepMode::Normal).await?;
         Ok(())
     }
 
-    fn update_frame(
+    async fn update_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         _delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
         assert!(buffer.len() == buffer_len(WIDTH as usize, HEIGHT as usize));
-        self.cmd_with_data(spi, Command::WriteRam, buffer)?;
+        self.cmd_with_data(spi, Command::WriteRam, buffer).await?;
 
-        self.command(spi, Command::WriteRamRed)?;
-        self.interface.data_x_times(
-            spi,
-            TriColor::Black.get_byte_value(),
-            buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-        )?;
+        self.command(spi, Command::WriteRamRed).await?;
+        self.interface
+            .data_x_times(
+                spi,
+                TriColor::Black.get_byte_value(),
+                buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+            )
+            .await?;
         Ok(())
     }
 
-    fn update_partial_frame(
+    async fn update_partial_frame(
         &mut self,
         _spi: &mut SPI,
         _delay: &mut DELAY,
@@ -273,27 +281,27 @@ where
         unimplemented!();
     }
 
-    fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.command(spi, Command::MasterActivation)?;
-        self.wait_until_idle(spi, delay)?;
+    async fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.command(spi, Command::MasterActivation).await?;
+        self.wait_until_idle(spi, delay).await?;
 
         Ok(())
     }
 
-    fn update_and_display_frame(
+    async fn update_and_display_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.update_frame(spi, buffer, delay)?;
-        self.display_frame(spi, delay)?;
+        self.update_frame(spi, buffer, delay).await?;
+        self.display_frame(spi, delay).await?;
         Ok(())
     }
 
-    fn clear_frame(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.clear_achromatic_frame(spi)?;
-        self.clear_chromatic_frame(spi)
+    async fn clear_frame(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.clear_achromatic_frame(spi).await?;
+        self.clear_chromatic_frame(spi).await
     }
 
     fn set_background_color(&mut self, background_color: TriColor) {
@@ -312,7 +320,7 @@ where
         HEIGHT
     }
 
-    fn set_lut(
+    async fn set_lut(
         &mut self,
         _spi: &mut SPI,
         _delay: &mut DELAY,
@@ -321,12 +329,17 @@ where
         unimplemented!()
     }
 
-    fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+    async fn wait_until_idle(
+        &mut self,
+        _spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async]
 impl<SPI, BUSY, DC, RST, DELAY> Epd2in13b<SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
@@ -335,7 +348,7 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn set_display_update_control(
+    async fn set_display_update_control(
         &mut self,
         spi: &mut SPI,
         display_update_control: DisplayUpdateControl,
@@ -345,9 +358,10 @@ where
             Command::DisplayUpdateControl1,
             &display_update_control.to_bytes(),
         )
+        .await
     }
 
-    fn set_border_waveform(
+    async fn set_border_waveform(
         &mut self,
         spi: &mut SPI,
         borderwaveform: BorderWaveForm,
@@ -357,20 +371,31 @@ where
             Command::BorderWaveformControl,
             &[borderwaveform.to_u8()],
         )
+        .await
     }
 
     /// Triggers the deep sleep mode
-    fn set_sleep_mode(&mut self, spi: &mut SPI, mode: DeepSleepMode) -> Result<(), SPI::Error> {
+    async fn set_sleep_mode(
+        &mut self,
+        spi: &mut SPI,
+        mode: DeepSleepMode,
+    ) -> Result<(), SPI::Error> {
         self.cmd_with_data(spi, Command::DeepSleepMode, &[mode as u8])
+            .await
     }
 
-    fn set_driver_output(&mut self, spi: &mut SPI, output: DriverOutput) -> Result<(), SPI::Error> {
+    async fn set_driver_output(
+        &mut self,
+        spi: &mut SPI,
+        output: DriverOutput,
+    ) -> Result<(), SPI::Error> {
         self.cmd_with_data(spi, Command::DriverOutputControl, &output.to_bytes())
+            .await
     }
 
     /// Sets the data entry mode (ie. how X and Y positions changes when writing
     /// data to RAM)
-    fn set_data_entry_mode(
+    async fn set_data_entry_mode(
         &mut self,
         spi: &mut SPI,
         counter_incr_mode: DataEntryModeIncr,
@@ -378,10 +403,11 @@ where
     ) -> Result<(), SPI::Error> {
         let mode = counter_incr_mode as u8 | counter_direction as u8;
         self.cmd_with_data(spi, Command::DataEntryModeSetting, &[mode])
+            .await
     }
 
     /// Sets both X and Y pixels ranges
-    fn set_ram_area(
+    async fn set_ram_area(
         &mut self,
         spi: &mut SPI,
         start_x: u32,
@@ -393,7 +419,8 @@ where
             spi,
             Command::SetRamXAddressStartEndPosition,
             &[(start_x >> 3) as u8, (end_x >> 3) as u8],
-        )?;
+        )
+        .await?;
 
         self.cmd_with_data(
             spi,
@@ -405,96 +432,111 @@ where
                 (end_y >> 8) as u8,
             ],
         )
+        .await
     }
 
     /// Sets both X and Y pixels counters when writing data to RAM
-    fn set_ram_address_counters(
+    async fn set_ram_address_counters(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
         x: u32,
         y: u32,
     ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.cmd_with_data(spi, Command::SetRamXAddressCounter, &[(x >> 3) as u8])?;
+        self.wait_until_idle(spi, delay).await?;
+        self.cmd_with_data(spi, Command::SetRamXAddressCounter, &[(x >> 3) as u8])
+            .await?;
 
         self.cmd_with_data(
             spi,
             Command::SetRamYAddressCounter,
             &[y as u8, (y >> 8) as u8],
-        )?;
+        )
+        .await?;
         Ok(())
     }
 
-    fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, command)
+    async fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, command).await
     }
 
-    fn cmd_with_data(
+    async fn cmd_with_data(
         &mut self,
         spi: &mut SPI,
         command: Command,
         data: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(spi, command, data)
+        self.interface.cmd_with_data(spi, command, data).await
     }
 
-    fn clear_achromatic_frame(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
+    async fn clear_achromatic_frame(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
         match self.background_color {
             TriColor::White => {
-                self.command(spi, Command::WriteRam)?;
-                self.interface.data_x_times(
-                    spi,
-                    0xFF,
-                    buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-                )?;
+                self.command(spi, Command::WriteRam).await?;
+                self.interface
+                    .data_x_times(
+                        spi,
+                        0xFF,
+                        buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+                    )
+                    .await?;
             }
             TriColor::Chromatic => {
-                self.command(spi, Command::WriteRam)?;
-                self.interface.data_x_times(
-                    spi,
-                    0xFF,
-                    buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-                )?;
+                self.command(spi, Command::WriteRam).await?;
+                self.interface
+                    .data_x_times(
+                        spi,
+                        0xFF,
+                        buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+                    )
+                    .await?;
             }
             TriColor::Black => {
-                self.command(spi, Command::WriteRam)?;
-                self.interface.data_x_times(
-                    spi,
-                    0x00,
-                    buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-                )?;
+                self.command(spi, Command::WriteRam).await?;
+                self.interface
+                    .data_x_times(
+                        spi,
+                        0x00,
+                        buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+                    )
+                    .await?;
             }
         }
 
         Ok(())
     }
 
-    fn clear_chromatic_frame(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
+    async fn clear_chromatic_frame(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
         match self.background_color {
             TriColor::White => {
-                self.command(spi, Command::WriteRam)?;
-                self.interface.data_x_times(
-                    spi,
-                    0x00,
-                    buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-                )?;
+                self.command(spi, Command::WriteRam).await?;
+                self.interface
+                    .data_x_times(
+                        spi,
+                        0x00,
+                        buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+                    )
+                    .await?;
             }
             TriColor::Chromatic => {
-                self.command(spi, Command::WriteRam)?;
-                self.interface.data_x_times(
-                    spi,
-                    0xFF,
-                    buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-                )?;
+                self.command(spi, Command::WriteRam).await?;
+                self.interface
+                    .data_x_times(
+                        spi,
+                        0xFF,
+                        buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+                    )
+                    .await?;
             }
             TriColor::Black => {
-                self.command(spi, Command::WriteRam)?;
-                self.interface.data_x_times(
-                    spi,
-                    0x00,
-                    buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
-                )?;
+                self.command(spi, Command::WriteRam).await?;
+                self.interface
+                    .data_x_times(
+                        spi,
+                        0x00,
+                        buffer_len(WIDTH as usize, HEIGHT as usize) as u32,
+                    )
+                    .await?;
             }
         }
 

@@ -27,6 +27,8 @@ jobs:
       run: cargo build --examples --all-targets --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Run tests (async)
+      run: cargo test --verbose --lib --tests --benches --features async
     - name: Build docs
       run: cargo doc
     - name: Clippy

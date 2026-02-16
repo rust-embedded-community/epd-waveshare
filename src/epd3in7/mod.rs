@@ -2,11 +2,7 @@
 //!
 //!
 //! Build with the help of documentation/code from [Waveshare](https://www.waveshare.com/wiki/3.7inch_e-Paper_HAT),
-use embedded_hal::{
-    delay::DelayNs,
-    digital::{InputPin, OutputPin},
-    spi::SpiDevice,
-};
+use embedded_hal::digital::{InputPin, OutputPin};
 
 pub(crate) mod command;
 mod constants;
@@ -16,7 +12,7 @@ use self::constants::*;
 
 use crate::buffer_len;
 use crate::color::Color;
-use crate::interface::DisplayInterface;
+use crate::interface::{DelayNs, DisplayInterface, SpiDevice};
 use crate::traits::{InternalWiAdditions, RefreshLut, WaveshareDisplay};
 
 /// Width of the display.
@@ -50,6 +46,7 @@ pub struct EPD3in7<SPI, BUSY, DC, RST, DELAY> {
     background_color: Color,
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for EPD3in7<SPI, BUSY, DC, RST, DELAY>
 where
@@ -59,70 +56,89 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // reset the device
-        self.interface.reset(delay, 30, 10);
+        self.interface.reset(delay, 30, 10).await;
 
-        self.interface.cmd(spi, Command::SwReset)?;
-        delay.delay_us(300000u32);
-
-        self.interface
-            .cmd_with_data(spi, Command::AutoWriteRedRamRegularPattern, &[0xF7])?;
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
-        self.interface
-            .cmd_with_data(spi, Command::AutoWriteBwRamRegularPattern, &[0xF7])?;
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+        self.interface.cmd(spi, Command::SwReset).await?;
+        delay.delay_us(300000u32).await;
 
         self.interface
-            .cmd_with_data(spi, Command::GateSetting, &[0xDF, 0x01, 0x00])?;
+            .cmd_with_data(spi, Command::AutoWriteRedRamRegularPattern, &[0xF7])
+            .await?;
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         self.interface
-            .cmd_with_data(spi, Command::GateVoltage, &[0x00])?;
-        self.interface
-            .cmd_with_data(spi, Command::GateVoltageSource, &[0x41, 0xA8, 0x32])?;
-
-        self.interface
-            .cmd_with_data(spi, Command::DataEntrySequence, &[0x03])?;
-
-        self.interface
-            .cmd_with_data(spi, Command::BorderWaveformControl, &[0x03])?;
-
-        self.interface.cmd_with_data(
-            spi,
-            Command::BoosterSoftStartControl,
-            &[0xAE, 0xC7, 0xC3, 0xC0, 0xC0],
-        )?;
+            .cmd_with_data(spi, Command::AutoWriteBwRamRegularPattern, &[0xF7])
+            .await?;
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
 
         self.interface
-            .cmd_with_data(spi, Command::TemperatureSensorSelection, &[0x80])?;
+            .cmd_with_data(spi, Command::GateSetting, &[0xDF, 0x01, 0x00])
+            .await?;
+        self.interface
+            .cmd_with_data(spi, Command::GateVoltage, &[0x00])
+            .await?;
+        self.interface
+            .cmd_with_data(spi, Command::GateVoltageSource, &[0x41, 0xA8, 0x32])
+            .await?;
 
         self.interface
-            .cmd_with_data(spi, Command::WriteVcomRegister, &[0x44])?;
-
-        self.interface.cmd_with_data(
-            spi,
-            Command::DisplayOption,
-            &[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x4F, 0xFF, 0xFF, 0xFF, 0xFF],
-        )?;
-
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamXAddressStartEndPosition,
-            &[0x00, 0x00, 0x17, 0x01],
-        )?;
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamYAddressStartEndPosition,
-            &[0x00, 0x00, 0xDF, 0x01],
-        )?;
+            .cmd_with_data(spi, Command::DataEntrySequence, &[0x03])
+            .await?;
 
         self.interface
-            .cmd_with_data(spi, Command::DisplayUpdateSequenceSetting, &[0xCF])?;
+            .cmd_with_data(spi, Command::BorderWaveformControl, &[0x03])
+            .await?;
 
-        self.set_lut(spi, delay, Some(RefreshLut::Full))?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::BoosterSoftStartControl,
+                &[0xAE, 0xC7, 0xC3, 0xC0, 0xC0],
+            )
+            .await?;
+
+        self.interface
+            .cmd_with_data(spi, Command::TemperatureSensorSelection, &[0x80])
+            .await?;
+
+        self.interface
+            .cmd_with_data(spi, Command::WriteVcomRegister, &[0x44])
+            .await?;
+
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::DisplayOption,
+                &[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x4F, 0xFF, 0xFF, 0xFF, 0xFF],
+            )
+            .await?;
+
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetRamXAddressStartEndPosition,
+                &[0x00, 0x00, 0x17, 0x01],
+            )
+            .await?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetRamYAddressStartEndPosition,
+                &[0x00, 0x00, 0xDF, 0x01],
+            )
+            .await?;
+
+        self.interface
+            .cmd_with_data(spi, Command::DisplayUpdateSequenceSetting, &[0xCF])
+            .await?;
+
+        self.set_lut(spi, delay, Some(RefreshLut::Full)).await?;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
     for EPD3in7<SPI, BUSY, DC, RST, DELAY>
 where
@@ -134,7 +150,7 @@ where
 {
     type DisplayColor = Color;
 
-    fn new(
+    async fn new(
         spi: &mut SPI,
         busy: BUSY,
         dc: DC,
@@ -147,19 +163,22 @@ where
             background_color: DEFAULT_BACKGROUND_COLOR,
         };
 
-        epd.init(spi, delay)?;
+        epd.init(spi, delay).await?;
         Ok(epd)
     }
 
-    fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.init(spi, delay)
+    async fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.init(spi, delay).await
     }
 
-    fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(spi, Command::Sleep, &[0xF7])?;
-        self.interface.cmd(spi, Command::PowerOff)?;
+    async fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
         self.interface
-            .cmd_with_data(spi, Command::Sleep2, &[0xA5])?;
+            .cmd_with_data(spi, Command::Sleep, &[0xF7])
+            .await?;
+        self.interface.cmd(spi, Command::PowerOff).await?;
+        self.interface
+            .cmd_with_data(spi, Command::Sleep2, &[0xA5])
+            .await?;
         Ok(())
     }
 
@@ -179,7 +198,7 @@ where
         HEIGHT
     }
 
-    fn update_frame(
+    async fn update_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
@@ -187,18 +206,21 @@ where
     ) -> Result<(), SPI::Error> {
         assert!(buffer.len() == buffer_len(WIDTH as usize, HEIGHT as usize));
         self.interface
-            .cmd_with_data(spi, Command::SetRamXAddressCounter, &[0x00, 0x00])?;
+            .cmd_with_data(spi, Command::SetRamXAddressCounter, &[0x00, 0x00])
+            .await?;
         self.interface
-            .cmd_with_data(spi, Command::SetRamYAddressCounter, &[0x00, 0x00])?;
+            .cmd_with_data(spi, Command::SetRamYAddressCounter, &[0x00, 0x00])
+            .await?;
 
         self.interface
-            .cmd_with_data(spi, Command::WriteRam, buffer)?;
+            .cmd_with_data(spi, Command::WriteRam, buffer)
+            .await?;
 
         Ok(())
     }
 
     #[allow(unused)]
-    fn update_partial_frame(
+    async fn update_partial_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -211,39 +233,45 @@ where
         todo!()
     }
 
-    fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         //self.interface
         //    .cmd_with_data(spi, Command::WRITE_LUT_REGISTER, &LUT_1GRAY_GC)?;
-        self.interface.cmd(spi, Command::DisplayUpdateSequence)?;
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+        self.interface
+            .cmd(spi, Command::DisplayUpdateSequence)
+            .await?;
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         Ok(())
     }
 
-    fn update_and_display_frame(
+    async fn update_and_display_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.update_frame(spi, buffer, delay)?;
-        self.display_frame(spi, delay)?;
+        self.update_frame(spi, buffer, delay).await?;
+        self.display_frame(spi, delay).await?;
         Ok(())
     }
 
-    fn clear_frame(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn clear_frame(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), SPI::Error> {
         self.interface
-            .cmd_with_data(spi, Command::SetRamXAddressCounter, &[0x00, 0x00])?;
+            .cmd_with_data(spi, Command::SetRamXAddressCounter, &[0x00, 0x00])
+            .await?;
         self.interface
-            .cmd_with_data(spi, Command::SetRamYAddressCounter, &[0x00, 0x00])?;
+            .cmd_with_data(spi, Command::SetRamYAddressCounter, &[0x00, 0x00])
+            .await?;
 
         let color = self.background_color.get_byte_value();
-        self.interface.cmd(spi, Command::WriteRam)?;
-        self.interface.data_x_times(spi, color, WIDTH * HEIGHT)?;
+        self.interface.cmd(spi, Command::WriteRam).await?;
+        self.interface
+            .data_x_times(spi, color, WIDTH * HEIGHT)
+            .await?;
 
         Ok(())
     }
 
-    fn set_lut(
+    async fn set_lut(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
@@ -255,12 +283,17 @@ where
         };
 
         self.interface
-            .cmd_with_data(spi, Command::WriteLutRegister, buffer)?;
+            .cmd_with_data(spi, Command::WriteLutRegister, buffer)
+            .await?;
         Ok(())
     }
 
-    fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+    async fn wait_until_idle(
+        &mut self,
+        _spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         Ok(())
     }
 }

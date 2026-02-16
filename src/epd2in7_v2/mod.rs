@@ -8,16 +8,12 @@
 //! - [Waveshare C driver](https://github.com/waveshareteam/e-Paper/blob/master/RaspberryPi_JetsonNano/c/lib/e-Paper/EPD_2in7_V2.c)
 //! - [Waveshare Python driver](https://github.com/waveshareteam/e-Paper/blob/master/RaspberryPi_JetsonNano/python/lib/waveshare_epd/epd2in7_V2.py)
 
-use embedded_hal::{
-    delay::DelayNs,
-    digital::{InputPin, OutputPin},
-    spi::SpiDevice,
-};
+use embedded_hal::digital::{InputPin, OutputPin};
 
 use crate::{
     buffer_len,
     color::Color,
-    interface::DisplayInterface,
+    interface::{DelayNs, DisplayInterface, SpiDevice},
     traits::{InternalWiAdditions, RefreshLut, WaveshareDisplay},
     type_a::command::Command,
 };
@@ -52,6 +48,7 @@ pub struct Epd2in7<SPI, BUSY, DC, RST, DELAY> {
     refresh: RefreshLut,
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for Epd2in7<SPI, BUSY, DC, RST, DELAY>
 where
@@ -61,23 +58,25 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // reset the device
-        self.interface.reset(delay, 200_000, 2_000);
+        self.interface.reset(delay, 200_000, 2_000).await;
 
-        self.wait_until_idle(spi, delay)?;
-        self.command(spi, Command::SwReset)?;
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
+        self.command(spi, Command::SwReset).await?;
+        self.wait_until_idle(spi, delay).await?;
 
-        self.use_full_frame(spi, delay)?;
+        self.use_full_frame(spi, delay).await?;
 
         self.interface
-            .cmd_with_data(spi, Command::DataEntryModeSetting, &[0x03])?;
+            .cmd_with_data(spi, Command::DataEntryModeSetting, &[0x03])
+            .await?;
 
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in7<SPI, BUSY, DC, RST, DELAY>
 where
@@ -88,7 +87,7 @@ where
     DELAY: DelayNs,
 {
     type DisplayColor = Color;
-    fn new(
+    async fn new(
         spi: &mut SPI,
         busy: BUSY,
         dc: DC,
@@ -105,36 +104,38 @@ where
             refresh: RefreshLut::Full,
         };
 
-        epd.init(spi, delay)?;
+        epd.init(spi, delay).await?;
 
         Ok(epd)
     }
 
-    fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.init(spi, delay)
+    async fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.init(spi, delay).await
     }
 
-    fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
+    async fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.wait_until_idle(spi, delay).await?;
         self.interface
-            .cmd_with_data(spi, Command::DeepSleepMode, &[0x01])?;
+            .cmd_with_data(spi, Command::DeepSleepMode, &[0x01])
+            .await?;
         Ok(())
     }
 
-    fn update_frame(
+    async fn update_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.use_full_frame(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
+        self.use_full_frame(spi, delay).await?;
         self.interface
-            .cmd_with_data(spi, Command::WriteRam, buffer)?;
+            .cmd_with_data(spi, Command::WriteRam, buffer)
+            .await?;
         Ok(())
     }
 
-    fn update_partial_frame(
+    async fn update_partial_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -144,51 +145,55 @@ where
         width: u32,
         height: u32,
     ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.set_ram_area(spi, x, y, x + width, y + height)?;
-        self.set_ram_counter(spi, delay, x, y)?;
+        self.wait_until_idle(spi, delay).await?;
+        self.set_ram_area(spi, x, y, x + width, y + height).await?;
+        self.set_ram_counter(spi, delay, x, y).await?;
 
         self.interface
-            .cmd_with_data(spi, Command::WriteRam, buffer)?;
+            .cmd_with_data(spi, Command::WriteRam, buffer)
+            .await?;
 
         Ok(())
     }
 
-    fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
+    async fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.wait_until_idle(spi, delay).await?;
         if self.refresh == RefreshLut::Full {
             self.interface
-                .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xF7])?;
+                .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xF7])
+                .await?;
         } else if self.refresh == RefreshLut::Quick {
             self.interface
-                .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xC7])?;
+                .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xC7])
+                .await?;
         }
 
-        self.interface.cmd(spi, Command::MasterActivation)?;
-        self.wait_until_idle(spi, delay)?;
+        self.interface.cmd(spi, Command::MasterActivation).await?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 
-    fn update_and_display_frame(
+    async fn update_and_display_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.update_frame(spi, buffer, delay)?;
-        self.display_frame(spi, delay)?;
+        self.update_frame(spi, buffer, delay).await?;
+        self.display_frame(spi, delay).await?;
         Ok(())
     }
 
-    fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        self.use_full_frame(spi, delay)?;
+    async fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.wait_until_idle(spi, delay).await?;
+        self.use_full_frame(spi, delay).await?;
 
         let color = self.color.get_byte_value();
 
-        self.interface.cmd(spi, Command::WriteRam)?;
+        self.interface.cmd(spi, Command::WriteRam).await?;
         self.interface
-            .data_x_times(spi, color, WIDTH / 8 * HEIGHT)?;
+            .data_x_times(spi, color, WIDTH / 8 * HEIGHT)
+            .await?;
 
         Ok(())
     }
@@ -209,7 +214,7 @@ where
         HEIGHT
     }
 
-    fn set_lut(
+    async fn set_lut(
         &mut self,
         _spi: &mut SPI,
         _delay: &mut DELAY,
@@ -221,12 +226,17 @@ where
         Ok(())
     }
 
-    fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+    async fn wait_until_idle(
+        &mut self,
+        _spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async]
 impl<SPI, BUSY, DC, RST, DELAY> Epd2in7<SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
@@ -235,11 +245,11 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, command)
+    async fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, command).await
     }
 
-    fn set_ram_area(
+    async fn set_ram_area(
         &mut self,
         spi: &mut SPI,
         start_x: u32,
@@ -250,50 +260,57 @@ where
         assert!(start_x < end_x);
         assert!(start_y < end_y);
 
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamXAddressStartEndPosition,
-            &[(start_x >> 3) as u8, (end_x >> 3) as u8],
-        )?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetRamXAddressStartEndPosition,
+                &[(start_x >> 3) as u8, (end_x >> 3) as u8],
+            )
+            .await?;
 
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamYAddressStartEndPosition,
-            &[
-                (start_y & 0xFF) as u8,
-                ((start_y >> 8) & 0x01) as u8,
-                (end_y & 0xFF) as u8,
-                ((end_y >> 8) & 0x01) as u8,
-            ],
-        )?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetRamYAddressStartEndPosition,
+                &[
+                    (start_y & 0xFF) as u8,
+                    ((start_y >> 8) & 0x01) as u8,
+                    (end_y & 0xFF) as u8,
+                    ((end_y >> 8) & 0x01) as u8,
+                ],
+            )
+            .await?;
         Ok(())
     }
 
-    fn set_ram_counter(
+    async fn set_ram_counter(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
         x: u32,
         y: u32,
     ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         self.interface
-            .cmd_with_data(spi, Command::SetRamXAddressCounter, &[(x & 0xFF) as u8])?;
+            .cmd_with_data(spi, Command::SetRamXAddressCounter, &[(x & 0xFF) as u8])
+            .await?;
 
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamYAddressCounter,
-            &[(y & 0xFF) as u8, ((y >> 8) & 0x01) as u8],
-        )?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::SetRamYAddressCounter,
+                &[(y & 0xFF) as u8, ((y >> 8) & 0x01) as u8],
+            )
+            .await?;
         Ok(())
     }
 
-    fn use_full_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn use_full_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // choose full frame/ram
-        self.set_ram_area(spi, 0, 0, WIDTH - 1, HEIGHT - 1)?;
+        self.set_ram_area(spi, 0, 0, WIDTH - 1, HEIGHT - 1).await?;
 
         // start from the beginning
-        self.set_ram_counter(spi, delay, 0, 0)
+        self.set_ram_counter(spi, delay, 0, 0).await
     }
 }
 

@@ -50,9 +50,9 @@
 //!# Ok(())
 //!# }
 //!```
-use embedded_hal::{delay::*, digital::*, spi::SpiDevice};
+use embedded_hal::digital::*;
 
-use crate::interface::DisplayInterface;
+use crate::interface::{DelayNs, DisplayInterface, SpiDevice};
 use crate::traits::{
     InternalWiAdditions, RefreshLut, WaveshareDisplay, WaveshareThreeColorDisplay,
 };
@@ -97,6 +97,7 @@ pub struct Epd2in13bc<SPI, BUSY, DC, RST, DELAY> {
     color: TriColor,
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for Epd2in13bc<SPI, BUSY, DC, RST, DELAY>
 where
@@ -106,40 +107,45 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // Values taken from datasheet and sample code
 
-        self.interface.reset(delay, 10_000, 10_000);
+        self.interface.reset(delay, 10_000, 10_000).await;
 
         // start the booster
         self.interface
-            .cmd_with_data(spi, Command::BoosterSoftStart, &[0x17, 0x17, 0x17])?;
+            .cmd_with_data(spi, Command::BoosterSoftStart, &[0x17, 0x17, 0x17])
+            .await?;
 
         // power on
-        self.command(spi, Command::PowerOn)?;
-        delay.delay_us(5000);
-        self.wait_until_idle(spi, delay)?;
+        self.command(spi, Command::PowerOn).await?;
+        delay.delay_us(5000).await;
+        self.wait_until_idle(spi, delay).await?;
 
         // set the panel settings
-        self.cmd_with_data(spi, Command::PanelSetting, &[0x8F])?;
+        self.cmd_with_data(spi, Command::PanelSetting, &[0x8F])
+            .await?;
 
         self.cmd_with_data(
             spi,
             Command::VcomAndDataIntervalSetting,
             &[WHITE_BORDER | VCOM_DATA_INTERVAL],
-        )?;
+        )
+        .await?;
 
         // set resolution
-        self.send_resolution(spi)?;
+        self.send_resolution(spi).await?;
 
-        self.cmd_with_data(spi, Command::VcmDcSetting, &[0x0A])?;
+        self.cmd_with_data(spi, Command::VcmDcSetting, &[0x0A])
+            .await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
 
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareThreeColorDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in13bc<SPI, BUSY, DC, RST, DELAY>
 where
@@ -149,48 +155,53 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn update_color_frame(
+    async fn update_color_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
         black: &[u8],
         chromatic: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.update_achromatic_frame(spi, delay, black)?;
-        self.update_chromatic_frame(spi, delay, chromatic)
+        self.update_achromatic_frame(spi, delay, black).await?;
+        self.update_chromatic_frame(spi, delay, chromatic).await
     }
 
     /// Update only the black/white data of the display.
     ///
     /// Finish by calling `update_chromatic_frame`.
-    fn update_achromatic_frame(
+    async fn update_achromatic_frame(
         &mut self,
         spi: &mut SPI,
         _delay: &mut DELAY,
         black: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::DataStartTransmission1)?;
-        self.interface.data(spi, black)?;
+        self.interface
+            .cmd(spi, Command::DataStartTransmission1)
+            .await?;
+        self.interface.data(spi, black).await?;
         Ok(())
     }
 
     /// Update only chromatic data of the display.
     ///
     /// This data takes precedence over the black/white data.
-    fn update_chromatic_frame(
+    async fn update_chromatic_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
         chromatic: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::DataStartTransmission2)?;
-        self.interface.data(spi, chromatic)?;
+        self.interface
+            .cmd(spi, Command::DataStartTransmission2)
+            .await?;
+        self.interface.data(spi, chromatic).await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async(AFIT)]
 impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
     for Epd2in13bc<SPI, BUSY, DC, RST, DELAY>
 where
@@ -201,7 +212,7 @@ where
     DELAY: DelayNs,
 {
     type DisplayColor = TriColor;
-    fn new(
+    async fn new(
         spi: &mut SPI,
         busy: BUSY,
         dc: DC,
@@ -214,30 +225,32 @@ where
 
         let mut epd = Epd2in13bc { interface, color };
 
-        epd.init(spi, delay)?;
+        epd.init(spi, delay).await?;
 
         Ok(epd)
     }
 
-    fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    async fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // Section 8.2 from datasheet
-        self.interface.cmd_with_data(
-            spi,
-            Command::VcomAndDataIntervalSetting,
-            &[FLOATING_BORDER | VCOM_DATA_INTERVAL],
-        )?;
+        self.interface
+            .cmd_with_data(
+                spi,
+                Command::VcomAndDataIntervalSetting,
+                &[FLOATING_BORDER | VCOM_DATA_INTERVAL],
+            )
+            .await?;
 
-        self.command(spi, Command::PowerOff)?;
+        self.command(spi, Command::PowerOff).await?;
         // The example STM code from Github has a wait after PowerOff
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
 
-        self.cmd_with_data(spi, Command::DeepSleep, &[0xA5])?;
+        self.cmd_with_data(spi, Command::DeepSleep, &[0xA5]).await?;
 
         Ok(())
     }
 
-    fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.init(spi, delay)
+    async fn wake_up(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.init(spi, delay).await
     }
 
     fn set_background_color(&mut self, color: TriColor) {
@@ -256,28 +269,34 @@ where
         HEIGHT
     }
 
-    fn update_frame(
+    async fn update_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, Command::DataStartTransmission1)?;
+        self.interface
+            .cmd(spi, Command::DataStartTransmission1)
+            .await?;
 
-        self.interface.data(spi, buffer)?;
+        self.interface.data(spi, buffer).await?;
 
         // Clear the chromatic layer
         let color = self.color.get_byte_value();
 
-        self.interface.cmd(spi, Command::DataStartTransmission2)?;
-        self.interface.data_x_times(spi, color, NUM_DISPLAY_BITS)?;
+        self.interface
+            .cmd(spi, Command::DataStartTransmission2)
+            .await?;
+        self.interface
+            .data_x_times(spi, color, NUM_DISPLAY_BITS)
+            .await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 
     #[allow(unused)]
-    fn update_partial_frame(
+    async fn update_partial_frame(
         &mut self,
         spi: &mut SPI,
         delay: &mut DELAY,
@@ -290,43 +309,51 @@ where
         Ok(())
     }
 
-    fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.command(spi, Command::DisplayRefresh)?;
+    async fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.command(spi, Command::DisplayRefresh).await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 
-    fn update_and_display_frame(
+    async fn update_and_display_frame(
         &mut self,
         spi: &mut SPI,
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
-        self.update_frame(spi, buffer, delay)?;
-        self.display_frame(spi, delay)?;
+        self.update_frame(spi, buffer, delay).await?;
+        self.display_frame(spi, delay).await?;
         Ok(())
     }
 
-    fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.send_resolution(spi)?;
+    async fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+        self.send_resolution(spi).await?;
 
         let color = DEFAULT_BACKGROUND_COLOR.get_byte_value();
 
         // Clear the black
-        self.interface.cmd(spi, Command::DataStartTransmission1)?;
+        self.interface
+            .cmd(spi, Command::DataStartTransmission1)
+            .await?;
 
-        self.interface.data_x_times(spi, color, NUM_DISPLAY_BITS)?;
+        self.interface
+            .data_x_times(spi, color, NUM_DISPLAY_BITS)
+            .await?;
 
         // Clear the chromatic
-        self.interface.cmd(spi, Command::DataStartTransmission2)?;
-        self.interface.data_x_times(spi, color, NUM_DISPLAY_BITS)?;
+        self.interface
+            .cmd(spi, Command::DataStartTransmission2)
+            .await?;
+        self.interface
+            .data_x_times(spi, color, NUM_DISPLAY_BITS)
+            .await?;
 
-        self.wait_until_idle(spi, delay)?;
+        self.wait_until_idle(spi, delay).await?;
         Ok(())
     }
 
-    fn set_lut(
+    async fn set_lut(
         &mut self,
         _spi: &mut SPI,
         _delay: &mut DELAY,
@@ -335,12 +362,17 @@ where
         Ok(())
     }
 
-    fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+    async fn wait_until_idle(
+        &mut self,
+        _spi: &mut SPI,
+        delay: &mut DELAY,
+    ) -> Result<(), SPI::Error> {
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW).await;
         Ok(())
     }
 }
 
+#[maybe_async::maybe_async]
 impl<SPI, BUSY, DC, RST, DELAY> Epd2in13bc<SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
@@ -349,36 +381,40 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
-        self.interface.cmd(spi, command)
+    async fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, command).await
     }
 
-    fn send_data(&mut self, spi: &mut SPI, data: &[u8]) -> Result<(), SPI::Error> {
-        self.interface.data(spi, data)
+    async fn send_data(&mut self, spi: &mut SPI, data: &[u8]) -> Result<(), SPI::Error> {
+        self.interface.data(spi, data).await
     }
 
-    fn cmd_with_data(
+    async fn cmd_with_data(
         &mut self,
         spi: &mut SPI,
         command: Command,
         data: &[u8],
     ) -> Result<(), SPI::Error> {
-        self.interface.cmd_with_data(spi, command, data)
+        self.interface.cmd_with_data(spi, command, data).await
     }
 
-    fn send_resolution(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
+    async fn send_resolution(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
         let w = self.width();
         let h = self.height();
 
-        self.command(spi, Command::ResolutionSetting)?;
+        self.command(spi, Command::ResolutionSetting).await?;
 
-        self.send_data(spi, &[w as u8])?;
-        self.send_data(spi, &[(h >> 8) as u8])?;
-        self.send_data(spi, &[h as u8])
+        self.send_data(spi, &[w as u8]).await?;
+        self.send_data(spi, &[(h >> 8) as u8]).await?;
+        self.send_data(spi, &[h as u8]).await
     }
 
     /// Set the outer border of the display to the chosen color.
-    pub fn set_border_color(&mut self, spi: &mut SPI, color: TriColor) -> Result<(), SPI::Error> {
+    pub async fn set_border_color(
+        &mut self,
+        spi: &mut SPI,
+        color: TriColor,
+    ) -> Result<(), SPI::Error> {
         let border = match color {
             TriColor::Black => BLACK_BORDER,
             TriColor::White => WHITE_BORDER,
@@ -389,5 +425,6 @@ where
             Command::VcomAndDataIntervalSetting,
             &[border | VCOM_DATA_INTERVAL],
         )
+        .await
     }
 }
