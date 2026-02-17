@@ -29,7 +29,7 @@ pub const HEIGHT: u32 = 296;
 pub const EPD_ARRAY: u32 = 4736;
 /// Default Background Color (white)
 pub const DEFAULT_BACKGROUND_COLOR: Color = Color::Black;
-const IS_BUSY_LOW: bool = false;
+const IS_BUSY_LOW: bool = true;
 const SINGLE_BYTE_WRITE: bool = true;
 
 use crate::color::Color;
