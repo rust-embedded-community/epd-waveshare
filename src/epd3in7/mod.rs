@@ -50,6 +50,29 @@ pub struct EPD3in7<SPI, BUSY, DC, RST, DELAY> {
     background_color: Color,
 }
 
+impl<SPI, BUSY, DC, RST, DELAY> EPD3in7<SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    fn reset_ram_start_end_positions(&mut self, spi: &mut SPI) -> Result<(), SPI::Error> {
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamXAddressStartEndPosition,
+            &[0x00, 0x00, 0x17, 0x01],
+        )?;
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamYAddressStartEndPosition,
+            &[0x00, 0x00, 0xDF, 0x01],
+        )?;
+        Ok(())
+    }
+}
+
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
     for EPD3in7<SPI, BUSY, DC, RST, DELAY>
 where
@@ -64,7 +87,7 @@ where
         self.interface.reset(delay, 30, 10);
 
         self.interface.cmd(spi, Command::SwReset)?;
-        delay.delay_us(300000u32);
+        delay.delay_us(10000u32);
 
         self.interface
             .cmd_with_data(spi, Command::AutoWriteRedRamRegularPattern, &[0xF7])?;
@@ -101,19 +124,10 @@ where
         self.interface.cmd_with_data(
             spi,
             Command::DisplayOption,
-            &[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x4F, 0xFF, 0xFF, 0xFF, 0xFF],
+            &[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF],
         )?;
 
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamXAddressStartEndPosition,
-            &[0x00, 0x00, 0x17, 0x01],
-        )?;
-        self.interface.cmd_with_data(
-            spi,
-            Command::SetRamYAddressStartEndPosition,
-            &[0x00, 0x00, 0xDF, 0x01],
-        )?;
+        self.reset_ram_start_end_positions(spi)?;
 
         self.interface
             .cmd_with_data(spi, Command::DisplayUpdateSequenceSetting, &[0xCF])?;
@@ -197,7 +211,6 @@ where
         Ok(())
     }
 
-    #[allow(unused)]
     fn update_partial_frame(
         &mut self,
         spi: &mut SPI,
@@ -208,12 +221,61 @@ where
         width: u32,
         height: u32,
     ) -> Result<(), SPI::Error> {
-        todo!()
+        let x_start = x;
+        let x_end = x + width - 1;
+        let y_start = y;
+        let y_end = y + height - 1;
+
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamXAddressStartEndPosition,
+            &[
+                (x_start & 0xFF) as u8,
+                ((x_start >> 8) & 0x03) as u8,
+                (x_end & 0xFF) as u8,
+                ((x_end >> 8) & 0x03) as u8,
+            ],
+        )?;
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamYAddressStartEndPosition,
+            &[
+                (y_start & 0xFF) as u8,
+                ((y_start >> 8) & 0x03) as u8,
+                (y_end & 0xFF) as u8,
+                ((y_end >> 8) & 0x03) as u8,
+            ],
+        )?;
+
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamXAddressCounter,
+            &[(x_start & 0xFF) as u8, ((x_start >> 8) & 0x03) as u8],
+        )?;
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamYAddressCounter,
+            &[(y_start & 0xFF) as u8, ((y_start >> 8) & 0x03) as u8],
+        )?;
+
+        self.interface
+            .cmd_with_data(spi, Command::WriteRam, buffer)?;
+
+        self.set_lut(spi, delay, Some(RefreshLut::Quick))?;
+        self.interface
+            .cmd_with_data(spi, Command::DisplayUpdateSequenceSetting, &[0xCF])?;
+        self.interface.cmd(spi, Command::DisplayUpdateSequence)?;
+        self.interface.wait_until_idle(delay, IS_BUSY_LOW);
+
+        self.reset_ram_start_end_positions(spi)?;
+
+        Ok(())
     }
 
     fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        //self.interface
-        //    .cmd_with_data(spi, Command::WRITE_LUT_REGISTER, &LUT_1GRAY_GC)?;
+        self.set_lut(spi, delay, Some(RefreshLut::Full))?;
+        self.interface
+            .cmd_with_data(spi, Command::DisplayUpdateSequenceSetting, &[0xC7])?;
         self.interface.cmd(spi, Command::DisplayUpdateSequence)?;
         self.interface.wait_until_idle(delay, IS_BUSY_LOW);
         Ok(())

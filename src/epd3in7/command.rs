@@ -48,6 +48,8 @@ pub(crate) enum Command {
     WriteRam = 0x24,
     /// This command writes VCOM register from MCU interface
     WriteVcomRegister = 0x2C,
+    /// This command will transfer its data to R RAM, until another command is written
+    WriteRamRed = 0x26,
     /// This command writes LUT register from MCU interface (105 bytes),
     /// which contains the content of VS [nx-LUT], TP #[nX], RP #[n]
     WriteLutRegister = 0x32,
