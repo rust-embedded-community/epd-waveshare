@@ -1,6 +1,6 @@
 //! Graphics Support for EPDs
 
-use crate::color::{ColorType, TriColor};
+use crate::color::{Color, ColorType, TriColor};
 use core::marker::PhantomData;
 use embedded_graphics_core::prelude::*;
 
@@ -22,6 +22,21 @@ pub enum DisplayRotation {
 const fn line_bytes(width: u32, bits_per_pixel: usize) -> usize {
     // round to upper 8 bit count
     (width as usize * bits_per_pixel + 7) / 8
+}
+
+/// count the number of bytes needed for a partial window buffer
+const fn partial_frame_buffer_size(
+    x: u32,
+    width: u32,
+    height: u32,
+    bits_per_pixel: usize,
+) -> usize {
+    let aligned_x = x & !0b111;
+    let x_end = x + width - 1;
+    let aligned_x_end = x_end | 0b111;
+    let aligned_width = aligned_x_end - aligned_x + 1;
+    let buffer_size = height as usize * line_bytes(aligned_width, bits_per_pixel);
+    buffer_size
 }
 
 /// Display buffer used for drawing with embedded graphics
@@ -162,6 +177,40 @@ impl<
             pixel,
         );
     }
+
+    /// count the number of bytes needed for a partial window buffer
+    pub fn partial_frame_buffer_size(x: u32, width: u32, height: u32) -> usize {
+        partial_frame_buffer_size(
+            x,
+            width,
+            height,
+            COLOR::BITS_PER_PIXEL_PER_BUFFER * COLOR::BUFFER_COUNT,
+        )
+    }
+
+    /// Creates a virtual partial frame
+    /// Handles byte-alignment for you and keeps the full display buffer in sync
+    pub fn get_partial_frame<'a, 'b>(
+        &'a mut self,
+        buffer: &'b mut [u8],
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> PartialFrame<'a, 'b, COLOR> {
+        PartialFrame::new(
+            x,
+            y,
+            width,
+            height,
+            buffer,
+            &mut self.buffer,
+            WIDTH,
+            HEIGHT,
+            BYTECOUNT,
+            BWRBIT,
+        )
+    }
 }
 
 /// Some Tricolor specifics
@@ -247,7 +296,7 @@ impl<'a, COLOR: ColorType + PixelColor> VarDisplay<'a, COLOR> {
             rotation: DisplayRotation::default(),
             _color: PhantomData,
         };
-        // enfore some constraints dynamicly
+        // enforce some constraints dynamically
         if myself.buffer_size() > myself.buffer.len() {
             return Err(VarDisplayError::BufferTooSmall);
         }
@@ -293,6 +342,41 @@ impl<'a, COLOR: ColorType + PixelColor> VarDisplay<'a, COLOR> {
             pixel,
         );
     }
+
+    /// count the number of bytes needed for a partial window buffer
+    pub fn partial_frame_buffer_size(x: u32, width: u32, height: u32) -> usize {
+        partial_frame_buffer_size(
+            x,
+            width,
+            height,
+            COLOR::BITS_PER_PIXEL_PER_BUFFER * COLOR::BUFFER_COUNT,
+        )
+    }
+
+    /// Creates a virtual partial frame
+    /// Handles byte-alignment for you and keeps the full display buffer in sync
+    pub fn get_partial_frame<'b, 'c>(
+        &'b mut self,
+        buffer: &'c mut [u8],
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> PartialFrame<'b, 'c, COLOR> {
+        let buffer_size = self.buffer_size();
+        PartialFrame::new(
+            x,
+            y,
+            width,
+            height,
+            buffer,
+            &mut self.buffer,
+            self.width,
+            self.height,
+            buffer_size,
+            self.bwrbit,
+        )
+    }
 }
 
 /// Some Tricolor specifics
@@ -306,6 +390,315 @@ impl VarDisplay<'_, TriColor> {
     pub fn chromatic_buffer(&self) -> &[u8] {
         &self.buffer[self.buffer_size() / 2..self.buffer_size()]
     }
+}
+
+/// Same as `Display`, except that its characteristics are defined at runtime, and it's buffer is
+/// byte-aligned relative to the full display.
+/// See display for documentation as everything is the same except that default
+/// is replaced by a `new` method.
+pub struct PartialFrame<'a, 'b, COLOR: ColorType + PixelColor> {
+    original_x: u32,
+    aligned_x: u32,
+    y: u32,
+    original_width: u32,
+    aligned_width: u32,
+    height: u32,
+    bwrbit: bool,
+    buffer: &'b mut [u8],
+    full_display_buffer: &'a mut [u8],
+    full_display_width: u32,
+    full_display_size: usize,
+    rotation: DisplayRotation,
+    _color: PhantomData<COLOR>,
+}
+
+/// Byte-aligned dimensions and coordinates of a partial frame.
+/// To be used as parameters for the [crate::traits::WaveshareDisplay::update_partial_frame] function.
+pub struct PartialUpdateParameters<'a> {
+    /// X-coordinate of the partial frame, byte-aligned
+    pub x: u32,
+    /// Y-coordinate of the partial frame, unchanged
+    pub y: u32,
+    /// Width of the partial frame, byte-aligned
+    pub width: u32,
+    /// Height of the partial frame, unchanged
+    pub height: u32,
+    /// Byte-aligned buffer
+    pub buffer: &'a [u8],
+}
+
+/// For use with embedded_grahics
+impl<COLOR: ColorType + PixelColor> DrawTarget for PartialFrame<'_, '_, COLOR> {
+    type Color = COLOR;
+    type Error = core::convert::Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        for pixel in pixels {
+            self.set_pixel(pixel);
+        }
+        Ok(())
+    }
+}
+
+/// For use with embedded_grahics
+impl<COLOR: ColorType + PixelColor> OriginDimensions for PartialFrame<'_, '_, COLOR> {
+    fn size(&self) -> Size {
+        match self.rotation {
+            DisplayRotation::Rotate0 | DisplayRotation::Rotate180 => {
+                Size::new(self.original_width, self.height)
+            }
+            DisplayRotation::Rotate90 | DisplayRotation::Rotate270 => {
+                Size::new(self.height, self.original_width)
+            }
+        }
+    }
+}
+
+impl<'a, 'b, COLOR: ColorType + PixelColor> PartialFrame<'a, 'b, COLOR> {
+    /// Creates a byte-aligned buffer for you, based on X-coordinate and height.
+    ///
+    /// Parameters are documented in `Display` as they are the same as the const generics there.
+    /// bwrbit should be false for non tricolor displays
+    ///
+    /// Panics when width or height is equal to 0.
+    fn new(
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        buffer: &'b mut [u8],
+        full_display_buffer: &'a mut [u8],
+        full_display_width: u32,
+        full_display_height: u32,
+        full_display_size: usize,
+        bwrbit: bool,
+    ) -> Self {
+        if width == 0 {
+            panic!("The width should be greater than 0");
+        }
+        if height == 0 {
+            panic!("The height should be greater than 0");
+        }
+        if x + width > full_display_width || y + height > full_display_height {
+            panic!("Partial window out of bounds of full display. Partial windows should fully lie within the bounds of the display.")
+        }
+
+        let aligned_x = x & !0b111;
+        let x_end = x + width - 1;
+        let aligned_x_end = x_end | 0b111;
+        let aligned_width = aligned_x_end - aligned_x + 1;
+
+        Self {
+            original_x: x,
+            aligned_x,
+            y,
+            original_width: width,
+            aligned_width,
+            height,
+            bwrbit,
+            buffer,
+            full_display_buffer,
+            full_display_width,
+            full_display_size,
+            rotation: DisplayRotation::default(),
+            _color: PhantomData,
+        }
+    }
+
+    /// get the number of used bytes in the buffer
+    fn buffer_size(&self) -> usize {
+        self.buffer.len()
+    }
+
+    /// Set the display rotation.
+    ///
+    /// This only concerns future drawing made to it. Anything aready drawn
+    /// stays as it is in the buffer.
+    pub fn set_rotation(&mut self, rotation: DisplayRotation) {
+        self.rotation = rotation;
+    }
+
+    /// Get current rotation
+    pub fn rotation(&self) -> DisplayRotation {
+        self.rotation
+    }
+
+    /// Set a specific pixel color on this display
+    pub fn set_pixel(&mut self, mut pixel: Pixel<COLOR>) {
+        // Calculate alignment offset based on physical X coordinate
+        let offset_left = (self.original_x - self.aligned_x) as i32;
+        let offset_right = (self.aligned_width - self.original_width) as i32 - offset_left;
+
+        // Apply offset to the appropriate virtual coordinate
+        match self.rotation {
+            DisplayRotation::Rotate0 => {
+                pixel.0.x += offset_left;
+            }
+            DisplayRotation::Rotate90 => {
+                pixel.0.y += offset_right;
+            }
+            DisplayRotation::Rotate180 => {
+                pixel.0.x += offset_right;
+            }
+            DisplayRotation::Rotate270 => {
+                pixel.0.y += offset_left;
+            }
+        }
+
+        let size = self.buffer_size();
+        set_pixel(
+            &mut self.buffer[..size],
+            self.aligned_width,
+            self.height,
+            self.rotation,
+            self.bwrbit,
+            pixel,
+        );
+    }
+
+    /// Copy padding pixels from source buffer to destination buffer and update source buffer with destination content.
+    ///
+    /// This function:
+    /// 1. Copies padding bits from `full_display_buffer` to `self.buffer` to fill byte-alignment offsets
+    /// 2. Updates `full_display_buffer` with the full content from `self.buffer` to keep buffers in sync
+    fn copy_and_sync_buffer(
+        &mut self,
+        full_display_start: usize,
+        full_display_end: usize,
+        partial_buffer_start: usize,
+        partial_buffer_end: usize,
+    ) {
+        let full_display_slice =
+            &mut self.full_display_buffer[full_display_start..full_display_end];
+        let partial_buffer_slice = &mut self.buffer[partial_buffer_start..partial_buffer_end];
+
+        let partial_row_bytes = (self.aligned_width as usize + 7) / 8;
+        let full_display_row_bytes = (self.full_display_width as usize + 7) / 8;
+        let partial_x_byte_offset = self.aligned_x as usize / 8;
+
+        let left_padding_bits = self.original_x - self.aligned_x;
+        let right_padding_bits = self.aligned_width - left_padding_bits - self.original_width;
+
+        for row_idx in 0..self.height as usize {
+            let partial_row_start = row_idx * partial_row_bytes;
+            let full_display_row_start = (self.y as usize + row_idx) * full_display_row_bytes;
+            let full_display_byte_start = full_display_row_start + partial_x_byte_offset;
+
+            // Copy left padding bits from full display to partial buffer
+            copy_left_padding_bits(
+                &mut partial_buffer_slice[partial_row_start],
+                full_display_slice[full_display_byte_start],
+                left_padding_bits,
+            );
+
+            // Copy right padding bits from full display to partial buffer
+            let partial_last_byte_idx = partial_row_start + partial_row_bytes - 1;
+            let full_display_last_byte_idx = full_display_byte_start + partial_row_bytes - 1;
+            copy_right_padding_bits(
+                &mut partial_buffer_slice[partial_last_byte_idx],
+                full_display_slice[full_display_last_byte_idx],
+                right_padding_bits,
+            );
+
+            // Update full display buffer with the merged content from partial buffer
+            full_display_slice
+                [full_display_byte_start..full_display_byte_start + partial_row_bytes]
+                .copy_from_slice(
+                    &partial_buffer_slice[partial_row_start..partial_row_start + partial_row_bytes],
+                );
+        }
+    }
+}
+
+/// Some Monochrome specifics
+impl PartialFrame<'_, '_, Color> {
+    /// To be used as parameters for the [`crate::traits::WaveshareDisplay::update_partial_frame`] function.
+    ///
+    /// Copies padding pixels from `from_buffer` to fill the byte-alignment offset on both left and right sides.
+    /// Also updates `from_buffer` with the contents of the partial frame to keep it consistent.
+    pub fn get_update_parameters(&mut self) -> PartialUpdateParameters<'_> {
+        self.copy_and_sync_buffer(0, self.full_display_size, 0, self.buffer.len());
+
+        PartialUpdateParameters {
+            x: self.aligned_x,
+            y: self.y,
+            width: self.aligned_width,
+            height: self.height,
+            buffer: &self.buffer,
+        }
+    }
+}
+
+/// Some Tricolor specifics
+impl PartialFrame<'_, '_, TriColor> {
+    /// get black/white internal buffer to use it (to draw in epd)
+    pub fn bw_buffer(&self) -> &[u8] {
+        &self.buffer[..self.buffer_size() / 2]
+    }
+
+    /// get chromatic internal buffer to use it (to draw in epd)
+    pub fn chromatic_buffer(&self) -> &[u8] {
+        &self.buffer[self.buffer_size() / 2..self.buffer_size()]
+    }
+
+    /// To be used as parameters for the [`crate::traits::WaveshareDisplay::update_partial_frame`] function.
+    ///
+    /// Copies padding pixels from `from_buffer` to fill the byte-alignment offset on both left and right sides.
+    /// Also updates `from_buffer` with the contents of the partial frame to keep it consistent.
+    pub fn get_update_parameters(&mut self) -> PartialUpdateParameters<'_> {
+        let half_size = self.buffer_size() / 2;
+        let full_display_half_size = self.full_display_size / 2;
+
+        // Process BW buffer
+        self.copy_and_sync_buffer(0, full_display_half_size, 0, half_size);
+
+        // Process chromatic buffer
+        self.copy_and_sync_buffer(
+            full_display_half_size,
+            self.full_display_size,
+            half_size,
+            self.buffer_size(),
+        );
+
+        PartialUpdateParameters {
+            x: self.aligned_x,
+            y: self.y,
+            width: self.aligned_width,
+            height: self.height,
+            buffer: &self.buffer,
+        }
+    }
+}
+
+/// Copy the leftmost `offset_pixels` bits from src to dst
+fn copy_left_padding_bits(dst: &mut u8, src: u8, offset_pixels: u32) {
+    if offset_pixels == 0 {
+        return;
+    }
+
+    // Create mask for the padding bits (leftmost offset_pixels bits)
+    // For example, if offset_pixels = 3: mask = 0b11100000
+    let padding_mask = 0xFFu8 << (8 - offset_pixels);
+
+    // Clear padding bits in dst and copy from src
+    *dst = (*dst & !padding_mask) | (src & padding_mask);
+}
+
+/// Copy the rightmost `offset_pixels` bits from src to dst
+fn copy_right_padding_bits(dst: &mut u8, src: u8, offset_pixels: u32) {
+    if offset_pixels == 0 {
+        return;
+    }
+
+    // Create mask for the padding bits (rightmost offset_pixels bits)
+    // For example, if offset_pixels = 3: mask = 0b00000111
+    let padding_mask = (1u8 << offset_pixels) - 1;
+
+    // Clear padding bits in dst and copy from src
+    *dst = (*dst & !padding_mask) | (src & padding_mask);
 }
 
 // This is a function to share code between `Display` and `VarDisplay`

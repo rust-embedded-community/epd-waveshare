@@ -13,9 +13,12 @@ pub enum RefreshLut {
     /// The "normal" full Lookuptable for the Refresh-Sequence
     #[default]
     Full,
-    /// The quick LUT where not the full refresh sequence is followed.
-    /// This might lead to some
+    /// The quick LUT with faster refresh sequence
+    /// This might lead to some ghosting
     Quick,
+    /// No flashing at all. Should only be used for partial refreshing
+    /// Occasional full refresh will be needed to clear accumulated ghosting
+    PartialRefresh,
 }
 
 pub(crate) trait InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>

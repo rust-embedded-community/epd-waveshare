@@ -284,7 +284,9 @@ where
         }
         match self.refresh {
             RefreshLut::Full => self.set_lut_helper(spi, delay, &LUT_FULL_UPDATE),
-            RefreshLut::Quick => self.set_lut_helper(spi, delay, &LUT_PARTIAL_UPDATE),
+            RefreshLut::Quick | RefreshLut::PartialRefresh => {
+                self.set_lut_helper(spi, delay, &LUT_PARTIAL_UPDATE)
+            }
         }
     }
 

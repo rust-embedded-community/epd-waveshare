@@ -330,7 +330,7 @@ where
             RefreshLut::Full => {
                 self.set_lut_helper(spi, delay, &LUT_VCOM0, &LUT_WW, &LUT_BW, &LUT_WB, &LUT_BB)
             }
-            RefreshLut::Quick => self.set_lut_helper(
+            RefreshLut::Quick | RefreshLut::PartialRefresh => self.set_lut_helper(
                 spi,
                 delay,
                 &LUT_VCOM0_QUICK,

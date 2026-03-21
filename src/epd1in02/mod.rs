@@ -203,7 +203,9 @@ where
     ) -> Result<(), SPI::Error> {
         let (white_lut, black_lut) = match refresh_rate {
             Some(RefreshLut::Full) => (&LUT_FULL_UPDATE_WHITE, &LUT_FULL_UPDATE_BLACK),
-            Some(RefreshLut::Quick) => (&LUT_PARTIAL_UPDATE_WHITE, &LUT_PARTIAL_UPDATE_BLACK),
+            Some(RefreshLut::Quick | RefreshLut::PartialRefresh) => {
+                (&LUT_PARTIAL_UPDATE_WHITE, &LUT_PARTIAL_UPDATE_BLACK)
+            }
             None => return Ok(()),
         };
 

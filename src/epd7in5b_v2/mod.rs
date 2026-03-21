@@ -223,15 +223,47 @@ where
 
     fn update_partial_frame(
         &mut self,
-        _spi: &mut SPI,
-        _delay: &mut DELAY,
-        _buffer: &[u8],
-        _x: u32,
-        _y: u32,
-        _width: u32,
-        _height: u32,
+        spi: &mut SPI,
+        delay: &mut DELAY,
+        buffer: &[u8],
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
     ) -> Result<(), SPI::Error> {
-        unimplemented!()
+        self.wait_until_idle(spi, delay)?;
+        if buffer.len() as u32 != width / 8 * height {
+            //TODO panic or error
+        }
+
+        let hrst_upper = (x / 8) as u8 >> 5;
+        let hrst_lower = ((x / 8) << 3) as u8;
+        let hred_upper = ((x + width) / 8 - 1) as u8 >> 5;
+        let hred_lower = (((x + width) / 8 - 1) << 3) as u8 | 0b111;
+        let vrst_upper = (y >> 8) as u8;
+        let vrst_lower = y as u8;
+        let vred_upper = ((y + height - 1) >> 8) as u8;
+        let vred_lower = (y + height - 1) as u8;
+        let pt_scan = 0x01; // Gates scan both inside and outside of the partial window. (default)
+
+        self.command(spi, Command::PartialIn)?;
+        self.cmd_with_data(
+            spi,
+            Command::PartialWindow,
+            &[
+                hrst_upper, hrst_lower, hred_upper, hred_lower, vrst_upper, vrst_lower, vred_upper,
+                vred_lower, pt_scan,
+            ],
+        )?;
+        let half = buffer.len() / 2;
+        self.cmd_with_data(spi, Command::DataStartTransmission1, &buffer[..half])?;
+        self.cmd_with_data(spi, Command::DataStartTransmission2, &buffer[half..])?;
+
+        self.command(spi, Command::DisplayRefresh)?;
+        self.wait_until_idle(spi, delay)?;
+
+        self.command(spi, Command::PartialOut)?;
+        Ok(())
     }
 
     fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
@@ -308,53 +340,6 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    /// temporary replacement for missing delay in the trait to call wait_until_idle
-    #[allow(clippy::too_many_arguments)]
-    pub fn update_partial_frame2(
-        &mut self,
-        spi: &mut SPI,
-        buffer: &[u8],
-        x: u32,
-        y: u32,
-        width: u32,
-        height: u32,
-        delay: &mut DELAY,
-    ) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
-        if buffer.len() as u32 != width / 8 * height {
-            //TODO panic or error
-        }
-
-        let hrst_upper = (x / 8) as u8 >> 5;
-        let hrst_lower = ((x / 8) << 3) as u8;
-        let hred_upper = ((x + width) / 8 - 1) as u8 >> 5;
-        let hred_lower = (((x + width) / 8 - 1) << 3) as u8 | 0b111;
-        let vrst_upper = (y >> 8) as u8;
-        let vrst_lower = y as u8;
-        let vred_upper = ((y + height - 1) >> 8) as u8;
-        let vred_lower = (y + height - 1) as u8;
-        let pt_scan = 0x01; // Gates scan both inside and outside of the partial window. (default)
-
-        self.command(spi, Command::PartialIn)?;
-        self.cmd_with_data(
-            spi,
-            Command::PartialWindow,
-            &[
-                hrst_upper, hrst_lower, hred_upper, hred_lower, vrst_upper, vrst_lower, vred_upper,
-                vred_lower, pt_scan,
-            ],
-        )?;
-        let half = buffer.len() / 2;
-        self.cmd_with_data(spi, Command::DataStartTransmission1, &buffer[..half])?;
-        self.cmd_with_data(spi, Command::DataStartTransmission2, &buffer[half..])?;
-
-        self.command(spi, Command::DisplayRefresh)?;
-        self.wait_until_idle(spi, delay)?;
-
-        self.command(spi, Command::PartialOut)?;
-        Ok(())
-    }
-
     fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
         self.interface.cmd(spi, command)
     }

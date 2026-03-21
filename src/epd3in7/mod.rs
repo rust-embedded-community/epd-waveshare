@@ -251,7 +251,7 @@ where
     ) -> Result<(), SPI::Error> {
         let buffer = match refresh_rate {
             Some(RefreshLut::Full) | None => &LUT_1GRAY_GC,
-            Some(RefreshLut::Quick) => &LUT_1GRAY_DU,
+            Some(RefreshLut::Quick | RefreshLut::PartialRefresh) => &LUT_1GRAY_DU,
         };
 
         self.interface

@@ -374,7 +374,7 @@ where
     ) -> Result<(), SPI::Error> {
         let buffer = match refresh_rate {
             Some(RefreshLut::Full) | None => &LUT_FULL_UPDATE,
-            Some(RefreshLut::Quick) => &LUT_PARTIAL_UPDATE,
+            Some(RefreshLut::Quick | RefreshLut::PartialRefresh) => &LUT_PARTIAL_UPDATE,
         };
 
         self.cmd_with_data(spi, Command::WriteLutRegister, buffer)
