@@ -44,7 +44,7 @@ const fn line_bytes(width: u32, bits_per_pixel: usize) -> usize {
 /// Other displays, like [crate::epd5in83b_v2] in opposite, will draw color pixel if bit is
 /// cleared for that pixel, which is a `BWRBIT = false` mode.
 ///
-/// BWRBIT=true: chromatic doesn't override white, white bit cleared for black, white bit set for white, both bits set for chromatic
+/// BWRBIT=true: chromatic doesn't override white, white bit cleared for black, white bit set for white, both bits set for chromatic. chromatic needs to be set to white when not used
 /// BWRBIT=false: chromatic does override white, both bits cleared for black, white bit set for white, red bit set for black
 pub struct Display<
     const WIDTH: u32,
@@ -482,7 +482,7 @@ mod tests {
         std::println!("{:?}", bw_buffer);
         std::println!("{:?}", chromatic_buffer);
 
-        assert_eq!(bw_buffer, [128, 0]);
-        assert_eq!(chromatic_buffer, [64, 0]);
+        assert_eq!(bw_buffer, [192, 0]);
+        assert_eq!(chromatic_buffer, [160, 0]);
     }
 }

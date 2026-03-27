@@ -108,17 +108,14 @@ impl ColorType for TriColor {
     const BUFFER_COUNT: usize = 2;
     fn bitmask(&self, bwrbit: bool, pos: u32) -> (u8, u16) {
         let bit = 0x80 >> (pos % 8);
-        match self {
-            TriColor::Black => (!bit, 0u16),
-            TriColor::White => (!bit, bit as u16),
-            TriColor::Chromatic => (
-                !bit,
-                if bwrbit {
-                    (bit as u16) << 8
-                } else {
-                    (bit as u16) << 8 | bit as u16
-                },
-            ),
+
+        match (self, bwrbit) {
+            (TriColor::Black, true) => (!bit, (bit as u16) << 8),
+            (TriColor::Black, false) => (!bit, 0u16),
+            (TriColor::White, true) => (!bit, bit as u16 | ((bit as u16) << 8)),
+            (TriColor::White, false) => (!bit, bit as u16),
+            (TriColor::Chromatic, true) => (!bit, bit as u16),
+            (TriColor::Chromatic, false) => (!bit, (bit as u16) << 8 | bit as u16),
         }
     }
 }
@@ -547,15 +544,15 @@ mod tests {
 
         assert_eq!(
             TriColor::Black.bitmask(true, 0),
-            (0b01111111, u16::from_le_bytes([0b00000000, 0b00000000]))
+            (0b01111111, u16::from_le_bytes([0b00000000, 0b10000000]))
         );
         assert_eq!(
             TriColor::White.bitmask(true, 0),
-            (0b01111111, u16::from_le_bytes([0b10000000, 0b00000000]))
+            (0b01111111, u16::from_le_bytes([0b10000000, 0b10000000]))
         );
         assert_eq!(
             TriColor::Chromatic.bitmask(true, 0),
-            (0b01111111, u16::from_le_bytes([0b00000000, 0b10000000]))
+            (0b01111111, u16::from_le_bytes([0b10000000, 0b00000000]))
         );
     }
 }
