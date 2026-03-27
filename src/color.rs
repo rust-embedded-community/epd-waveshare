@@ -109,8 +109,8 @@ impl ColorType for TriColor {
     fn bitmask(&self, bwrbit: bool, pos: u32) -> (u8, u16) {
         let bit = 0x80 >> (pos % 8);
 
-        match (self,bwrbit) {
-            (TriColor::Black, true) => (!bit, 0u16 | ((bit as u16) << 8)),
+        match (self, bwrbit) {
+            (TriColor::Black, true) => (!bit, (bit as u16) << 8),
             (TriColor::Black, false) => (!bit, 0u16),
             (TriColor::White, true) => (!bit, bit as u16 | ((bit as u16) << 8)),
             (TriColor::White, false) => (!bit, bit as u16),
