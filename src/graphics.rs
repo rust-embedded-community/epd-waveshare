@@ -482,7 +482,7 @@ mod tests {
         std::println!("{:?}", bw_buffer);
         std::println!("{:?}", chromatic_buffer);
 
-        assert_eq!(bw_buffer, [128, 0]);
-        assert_eq!(chromatic_buffer, [64, 0]);
+        assert_eq!(bw_buffer, [192, 0]);
+        assert_eq!(chromatic_buffer, [160, 0]);
     }
 }

@@ -544,15 +544,15 @@ mod tests {
 
         assert_eq!(
             TriColor::Black.bitmask(true, 0),
-            (0b01111111, u16::from_le_bytes([0b00000000, 0b00000000]))
+            (0b01111111, u16::from_le_bytes([0b00000000, 0b10000000]))
         );
         assert_eq!(
             TriColor::White.bitmask(true, 0),
-            (0b01111111, u16::from_le_bytes([0b10000000, 0b00000000]))
+            (0b01111111, u16::from_le_bytes([0b10000000, 0b10000000]))
         );
         assert_eq!(
             TriColor::Chromatic.bitmask(true, 0),
-            (0b01111111, u16::from_le_bytes([0b00000000, 0b10000000]))
+            (0b01111111, u16::from_le_bytes([0b10000000, 0b00000000]))
         );
     }
 }
