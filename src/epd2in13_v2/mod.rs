@@ -56,7 +56,7 @@ pub type Display2in13 = crate::graphics::Display<
 >;
 
 /// Width of the display.
-pub const WIDTH: u32 = 122;
+pub const WIDTH: u32 = 130;
 
 /// Height of the display
 pub const HEIGHT: u32 = 250;
@@ -592,7 +592,7 @@ mod tests {
 
     #[test]
     fn epd_size() {
-        assert_eq!(WIDTH, 122);
+        assert_eq!(WIDTH, 130);
         assert_eq!(HEIGHT, 250);
         assert_eq!(DEFAULT_BACKGROUND_COLOR, Color::White);
     }
