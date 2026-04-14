@@ -1,0 +1,12 @@
+[Unit]
+Description=EPD 3.52" Status Display Timer
+Requires=epd3in52-status.service
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=1h
+AccuracySec=30
+Persistent=false
+
+[Install]
+WantedBy=timers.target

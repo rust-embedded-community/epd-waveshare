@@ -1,0 +1,15 @@
+[Unit]
+Description=EPD Status Display Update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/epd2in13_v4_status
+User=root
+StateDirectory=epd-status
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

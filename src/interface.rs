@@ -100,7 +100,11 @@ where
     ) -> Result<(), SPI::Error> {
         // high for data
         let _ = self.dc.set_high();
-        // Transfer data (u8) over spi
+        // KNOWN-LIMITATION: one spi.write() per byte — each issues a full
+        // ioctl with CS toggle on linux-embedded-hal. Acceptable for
+        // clear_frame() which is not on the hot path for status displays.
+        // A future optimisation would batch into a heap-allocated Vec or
+        // use a fixed-size stack buffer with chunked writes.
         for _ in 0..repetitions {
             self.write(spi, &[val])?;
         }
@@ -204,5 +208,16 @@ where
         //TODO: the upstream libraries always sleep for 200ms here
         // 10ms works fine with just for the 7in5_v2 but this needs to be validated for other devices
         delay.delay_us(200_000);
+    }
+
+    /// Minimal reset pulse with no trailing delay.
+    ///
+    /// Used by partial refresh sequences where the 200ms post-reset delay
+    /// in [`reset`] would cause the controller to perform a full reset
+    /// instead of a soft reset.
+    pub(crate) fn soft_reset(&mut self, delay: &mut DELAY, duration: u32) {
+        let _ = self.rst.set_low();
+        delay.delay_us(duration);
+        let _ = self.rst.set_high();
     }
 }

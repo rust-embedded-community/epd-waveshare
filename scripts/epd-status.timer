@@ -1,0 +1,12 @@
+[Unit]
+Description=EPD Status Display Timer
+Requires=epd-status.service
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=5min
+AccuracySec=30
+Persistent=false
+
+[Install]
+WantedBy=timers.target

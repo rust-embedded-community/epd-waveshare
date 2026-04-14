@@ -1,0 +1,11 @@
+[Unit]
+Description=EPD 3.52" Daily Panel Exercise Timer
+Requires=epd3in52-daily.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+AccuracySec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

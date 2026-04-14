@@ -1,0 +1,13 @@
+[Unit]
+Description=EPD 3.52" Daily Panel Exercise (carcinisation demo)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/epd3in52
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

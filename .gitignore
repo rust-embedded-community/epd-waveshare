@@ -14,3 +14,7 @@ Cargo.lock
 
 # intellij/clion
 .idea/
+
+# Internal process documentation — never upstream
+docs/
+.claude/

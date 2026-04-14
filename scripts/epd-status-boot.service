@@ -1,0 +1,13 @@
+[Unit]
+Description=EPD Status Display — boot state reset
+DefaultDependencies=no
+Before=epd-status.timer
+
+[Service]
+Type=oneshot
+ExecStart=/bin/rm -f /var/lib/epd-status/initialized \
+                     /var/lib/epd-status/base_set \
+                     /var/lib/epd-status/rotation
+
+[Install]
+WantedBy=sysinit.target
