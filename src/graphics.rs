@@ -138,6 +138,11 @@ impl<
         &self.buffer
     }
 
+    /// get internal buffer as mutable
+    pub fn buffer_mut(&mut self) -> &mut [u8] {
+        &mut self.buffer
+    }
+
     /// Set the display rotation.
     ///
     /// This only concerns future drawing made to it. Anything aready drawn
