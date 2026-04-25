@@ -131,7 +131,16 @@ where
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
         self.wait_until_idle(spi, delay)?;
-        self.cmd_with_data(spi, Command::DataStartTransmission2, buffer)?;
+        // Waveshare's reference C demo (EPD_7in5_V2.c::EPD_7IN5_V2_Display)
+        // sends the framebuffer to DTM1 (0x10) raw and to DTM2 (0x13) bitwise-
+        // inverted. The user-facing convention is bit 1 = white; the panel's
+        // DTM2 register expects bit 0 = white (datasheet §22, KW mode with
+        // NEW/OLD, DDX=00). Writing both DTM1 and DTM2 with opposite polarity
+        // forces a full LUTKW/LUTWK transition for every pixel, producing
+        // strong contrast. Without this, every framebuffer renders inverted.
+        self.cmd_with_data(spi, Command::DataStartTransmission1, buffer)?;
+        self.command(spi, Command::DataStartTransmission2)?;
+        self.interface.data_inverted(spi, buffer)?;
         Ok(())
     }
 
@@ -169,8 +178,11 @@ where
         self.wait_until_idle(spi, delay)?;
         self.send_resolution(spi)?;
 
+        // Match Waveshare's `EPD_7IN5_V2_Clear` (DTM1=0xFF, DTM2=0x00) so
+        // every pixel transitions black->white via LUTKW. See `update_frame`
+        // for the polarity rationale.
         self.command(spi, Command::DataStartTransmission1)?;
-        self.interface.data_x_times(spi, 0x00, WIDTH / 8 * HEIGHT)?;
+        self.interface.data_x_times(spi, 0xFF, WIDTH / 8 * HEIGHT)?;
 
         self.command(spi, Command::DataStartTransmission2)?;
         self.interface.data_x_times(spi, 0x00, WIDTH / 8 * HEIGHT)?;

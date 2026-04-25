@@ -89,6 +89,23 @@ where
         self.data(spi, data)
     }
 
+    /// Sends data with bytewise bitwise-NOT applied. Streams via a stack chunk
+    /// to avoid heap allocation. Required for displays whose DTM2 register
+    /// expects bit polarity inverted from the user-facing framebuffer (e.g.
+    /// 7.5" V2, where Waveshare's reference C demo
+    /// `EPD_7in5_V2.c::EPD_7IN5_V2_Display` applies the same `~` before 0x13).
+    pub(crate) fn data_inverted(&mut self, spi: &mut SPI, data: &[u8]) -> Result<(), SPI::Error> {
+        let _ = self.dc.set_high();
+        let mut chunk = [0u8; 256];
+        for source in data.chunks(chunk.len()) {
+            for (index, &byte) in source.iter().enumerate() {
+                chunk[index] = !byte;
+            }
+            self.write(spi, &chunk[..source.len()])?;
+        }
+        Ok(())
+    }
+
     /// Basic function for sending the same byte of data (one u8) multiple times over spi
     ///
     /// Enables direct interaction with the device with the help of [command()](ConnectionInterface::command())
