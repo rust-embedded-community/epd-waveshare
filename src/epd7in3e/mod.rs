@@ -3,6 +3,7 @@
 //! # References
 //!
 //! - [Datasheet](https://www.waveshare.com/wiki/7.3inch_e-Paper_HAT_(E))
+//! - [Waveshare C driver](https://github.com/waveshareteam/e-Paper/blob/af0c7dc2b04220b04dae75838cff47f9046d49b5/RaspberryPi_JetsonNano/c/lib/e-Paper/EPD_7in3e.c)
 //! - [Waveshare Python driver](https://github.com/waveshareteam/e-Paper/blob/8be47b27f1a6808fd82ea9ceeac04c172e4ee9a8/RaspberryPi_JetsonNano/python/lib/waveshare_epd/epd7in3e.py)
 
 use embedded_hal::{
