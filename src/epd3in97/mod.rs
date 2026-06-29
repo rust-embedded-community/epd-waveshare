@@ -1,23 +1,32 @@
+//! A simple Driver for the Waveshare 3.7" E-Ink Display via SPI
+//!
+//!
+//! Build with the help of documentation/code from [Waveshare](https://www.waveshare.com/wiki/3.7inch_e-Paper_HAT),
+
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::{InputPin, OutputPin};
 use embedded_hal::spi::SpiDevice;
 
 use crate::color::Color;
-use crate::interface::{self, DisplayInterface};
+use crate::interface::DisplayInterface;
 use crate::traits::{InternalWiAdditions, RefreshLut, WaveshareDisplay};
 
 pub(crate) mod command;
 use self::command::Command;
 use crate::buffer_len;
 
+/// Width of the display
 pub const WIDTH: u32 = 800;
+/// Height if the display
 pub const HEIGHT: u32 = 480;
 
 pub(crate) mod constants;
 
+/// default background color (white)
 pub const DEFAULT_BACKGROUND_COLOR: Color = Color::White;
 const SINGLE_BYTE_WRITE: bool = true;
 
+///Display with full size buffer for the 3in97 epd
 #[cfg(feature = "graphics")]
 pub type Display3in97 = crate::graphics::Display<
     WIDTH,
@@ -27,6 +36,7 @@ pub type Display3in97 = crate::graphics::Display<
     Color,
 >;
 
+/// 3in97 driver
 pub struct Epd3in97<SPI, BUSY, DC, RST, DELAY> {
     interface: DisplayInterface<SPI, BUSY, DC, RST, DELAY, SINGLE_BYTE_WRITE>,
     color: Color,
@@ -43,14 +53,14 @@ where
     DELAY: DelayNs,
 {
     fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
-        // dela in microseconds not miliseconds -> 10^-6
+        // delay in microseconds not miliseconds -> 10^-6
         // so 20 ms is 20_000 micros
         self.interface.reset(delay, 20_000, 2_000);
 
         // READ BUSY
-        self.interface.wait_until_idle(delay, true);
+        self.interface.wait_until_idle(delay, false);
         self.interface.cmd(spi, Command::SwReset)?;
-        self.interface.wait_until_idle(delay, true);
+        self.interface.wait_until_idle(delay, false);
 
         // select internal Temperature sensor Temperature Control
         self.interface
@@ -62,7 +72,6 @@ where
             Command::BoosterSoftStart,
             &[0xAE, 0xC7, 0xC3, 0xC0, 0x80],
         )?;
-
         // splitting 10-Bit number across 2 Bytes
         self.interface.cmd_with_data(
             spi,
@@ -215,7 +224,7 @@ where
         todo!()
     }
     fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
-        self.interface.wait_until_idle(delay, true);
+        self.interface.wait_until_idle(delay, false);
         Ok(())
     }
 }
