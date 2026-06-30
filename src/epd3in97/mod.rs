@@ -244,6 +244,27 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
+    /// new function to initialize a faster display, to use display_frame_fast
+    fn new_fast(
+        spi: &mut SPI,
+        busy: BUSY,
+        dc: DC,
+        rst: RST,
+        delay: &mut DELAY,
+        delay_us: Option<u32>,
+    ) -> Result<Self, <SPI>::Error>
+    where
+        Self: Sized,
+    {
+        let mut epd = Epd3in97 {
+            interface: DisplayInterface::new(busy, dc, rst, delay_us),
+            color: DEFAULT_BACKGROUND_COLOR,
+            refresh: RefreshLut::Full,
+        };
+
+        epd.fast_init(spi, delay)?;
+        Ok(epd)
+    }
     fn fast_init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
         // delay in microseconds not miliseconds -> 10^-6
         // so 20 ms is 20_000 micros
@@ -308,6 +329,17 @@ where
 
         self.interface
             .cmd_with_data(spi, Command::TemperatureSensorControlWrite, &[0x6A])?;
+        Ok(())
+    }
+
+    /// only works when init_fast is used!!
+    fn display_frame_fast(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
+        self.wait_until_idle(spi, delay)?;
+
+        self.interface
+            .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xD7])?;
+        self.interface.cmd(spi, Command::DisplayUpdateSequence)?;
+        self.wait_until_idle(spi, delay)?;
         Ok(())
     }
 }
