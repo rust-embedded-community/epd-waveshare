@@ -44,7 +44,6 @@ pub type Display3in97 = crate::graphics::Display<
 pub struct Epd3in97<SPI, BUSY, DC, RST, DELAY> {
     interface: DisplayInterface<SPI, BUSY, DC, RST, DELAY, SINGLE_BYTE_WRITE>,
     color: Color,
-    refresh: RefreshLut,
 }
 
 impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
@@ -140,14 +139,13 @@ where
         let mut epd = Epd3in97 {
             interface: DisplayInterface::new(busy, dc, rst, delay_us),
             color: DEFAULT_BACKGROUND_COLOR,
-            refresh: RefreshLut::Full,
         };
 
         epd.init(spi, delay)?;
         Ok(epd)
     }
     fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
-        self.wait_until_idle(spi, delay);
+        self.wait_until_idle(spi, delay)?;
         self.interface
             .cmd_with_data(spi, Command::DeepSleep, &[0x01])?;
         Ok(())
@@ -211,7 +209,7 @@ where
         Ok(())
     }
     fn clear_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
-        self.wait_until_idle(spi, delay);
+        self.wait_until_idle(spi, delay)?;
         let width = WIDTH / 8;
         let height = HEIGHT;
 
@@ -245,6 +243,7 @@ where
     DELAY: DelayNs,
 {
     /// new function to initialize a faster display, to use display_frame_fast
+    #[allow(unused)]
     fn new_fast(
         spi: &mut SPI,
         busy: BUSY,
@@ -259,12 +258,12 @@ where
         let mut epd = Epd3in97 {
             interface: DisplayInterface::new(busy, dc, rst, delay_us),
             color: DEFAULT_BACKGROUND_COLOR,
-            refresh: RefreshLut::Full,
         };
 
         epd.fast_init(spi, delay)?;
         Ok(epd)
     }
+    #[allow(unused)]
     fn fast_init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
         // delay in microseconds not miliseconds -> 10^-6
         // so 20 ms is 20_000 micros
@@ -325,7 +324,7 @@ where
 
         //temperature
         self.interface
-            .cmd_with_data(spi, Command::TemperatureSensorControl, &[0x80]);
+            .cmd_with_data(spi, Command::TemperatureSensorControl, &[0x80])?;
 
         self.interface
             .cmd_with_data(spi, Command::TemperatureSensorControlWrite, &[0x6A])?;
@@ -333,6 +332,7 @@ where
     }
 
     /// only works when init_fast is used!!
+    #[allow(unused)]
     fn display_frame_fast(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
         self.wait_until_idle(spi, delay)?;
 
