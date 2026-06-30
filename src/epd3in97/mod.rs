@@ -1,7 +1,13 @@
-//! A simple Driver for the Waveshare 3.7" E-Ink Display via SPI
+//! A simple Driver for the Waveshare 3.97" E-Ink Display via SPI
 //!
 //!
-//! Build with the help of documentation/code from [Waveshare](https://www.waveshare.com/wiki/3.7inch_e-Paper_HAT),
+//! Build with documentation from [Waveshare](https://www.waveshare.com/wiki/3.97inch_e-Paper_HAT+_Manual),
+//! Oriented on their provided source code [github](https://github.com/waveshareteam/e-Paper/tree/master/E-paper_Separate_Program/3in97_e-Paper)
+//!
+//! Partial refresh and 4-Grey scale is not yet implemented but I included the fast_init Sequence.
+//! The lut seems to be baked into the HAT+ so I did not yet see a reason to implement set_lut(),
+//! neither can I provide a lut as it doesn't seem to be provided.
+//! It is tested on an esp32c5.
 
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::{InputPin, OutputPin};
@@ -19,8 +25,6 @@ use crate::buffer_len;
 pub const WIDTH: u32 = 800;
 /// Height if the display
 pub const HEIGHT: u32 = 480;
-
-pub(crate) mod constants;
 
 /// default background color (white)
 pub const DEFAULT_BACKGROUND_COLOR: Color = Color::White;
@@ -173,6 +177,8 @@ where
         self.interface
             .cmd_with_data(spi, Command::WriteRamBw, buffer)
     }
+
+    #[allow(unused)]
     fn update_partial_frame(
         &mut self,
         spi: &mut SPI,
@@ -215,6 +221,7 @@ where
         self.interface.data_x_times(spi, color, width * height)?;
         Ok(())
     }
+    #[allow(unused)]
     fn set_lut(
         &mut self,
         spi: &mut SPI,
@@ -225,6 +232,82 @@ where
     }
     fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
         self.interface.wait_until_idle(delay, false);
+        Ok(())
+    }
+}
+
+impl<SPI, BUSY, DC, RST, DELAY> Epd3in97<SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    fn fast_init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
+        // delay in microseconds not miliseconds -> 10^-6
+        // so 20 ms is 20_000 micros
+        self.interface.reset(delay, 20_000, 2_000);
+
+        // READ BUSY
+        self.interface.wait_until_idle(delay, false);
+        self.interface.cmd(spi, Command::SwReset)?;
+        self.interface.wait_until_idle(delay, false);
+
+        //no temperature control
+
+        // Booster Soft-start Control (not really documented)
+        // same as init
+        self.interface.cmd_with_data(
+            spi,
+            Command::BoosterSoftStart,
+            &[0xAE, 0xC7, 0xC3, 0xC0, 0x80],
+        )?;
+        // splitting 10-Bit number across 2 Bytes
+        self.interface.cmd_with_data(
+            spi,
+            Command::GateSettings,
+            &[((HEIGHT - 1) % 256) as u8, ((HEIGHT - 1) / 256) as u8, 0x02],
+        )?;
+
+        self.interface
+            .cmd_with_data(spi, Command::DataEntryMode, &[0x01])?;
+
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamXAdressStartEndPosition,
+            &[
+                0x00,
+                0x00,
+                ((WIDTH - 1) % 256) as u8,
+                ((WIDTH - 1) / 256) as u8,
+            ],
+        )?;
+        self.interface.cmd_with_data(
+            spi,
+            Command::SetRamYAdressStartEndPosition,
+            &[
+                ((HEIGHT - 1) % 256) as u8,
+                ((HEIGHT - 1) / 256) as u8,
+                0x00,
+                0x00,
+            ],
+        )?;
+        self.interface
+            .cmd_with_data(spi, Command::SetRamXAdressCounter, &[0x00, 0x00])?;
+        self.interface
+            .cmd_with_data(spi, Command::SetRamYAdressCounter, &[0x00, 0x00])?;
+
+        // border waveform
+        self.interface
+            .cmd_with_data(spi, Command::BorderWaveform, &[0x01])?;
+
+        //temperature
+        self.interface
+            .cmd_with_data(spi, Command::TemperatureSensorControl, &[0x80]);
+
+        self.interface
+            .cmd_with_data(spi, Command::TemperatureSensorControlWrite, &[0x6A])?;
         Ok(())
     }
 }

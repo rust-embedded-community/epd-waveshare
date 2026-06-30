@@ -15,6 +15,7 @@ pub(crate) enum Command {
     DisplayUpdateControl1 = 0x21,
     DisplayUpdateControl2 = 0x22,
     WriteRamBw = 0x24,
+    WriteRamRed = 0x26,
     WriteVcomRegister = 0x2C,
     OTPRead = 0x2D,
     StatusBitRead = 0x2F,
