@@ -262,8 +262,8 @@ where
         self.cmd_with_data(spi, Command::LutForVcom, &LUT_VCOM_DC)?;
         self.cmd_with_data(spi, Command::LutWhiteToWhite, &LUT_WW)?;
         self.cmd_with_data(spi, Command::LutBlackToWhite, &LUT_BW)?;
-        self.cmd_with_data(spi, Command::LutWhiteToBlack, &LUT_WB)?;
-        self.cmd_with_data(spi, Command::LutBlackToBlack, &LUT_BB)?;
+        self.cmd_with_data(spi, Command::LutWhiteToBlack, &LUT_BB)?;
+        self.cmd_with_data(spi, Command::LutBlackToBlack, &LUT_WB)?;
         Ok(())
     }
 
@@ -453,12 +453,148 @@ where
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
+    use core::convert::Infallible;
+    use embedded_hal::{
+        delay::DelayNs,
+        digital::{ErrorType as DigitalErrorType, InputPin, OutputPin},
+        spi::{ErrorType as SpiErrorType, Operation, SpiDevice},
+    };
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+        vec::Vec,
+    };
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum SpiPhase {
+        Command,
+        Data,
+    }
+
+    struct RecordedWrite {
+        phase: SpiPhase,
+        bytes: Vec<u8>,
+    }
+
+    type Writes = Rc<RefCell<Vec<RecordedWrite>>>;
+
+    struct RecordingSpi {
+        dc_is_data: Rc<Cell<bool>>,
+        writes: Writes,
+    }
+
+    impl SpiErrorType for RecordingSpi {
+        type Error = Infallible;
+    }
+
+    impl SpiDevice for RecordingSpi {
+        fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
+            for operation in operations {
+                match operation {
+                    Operation::Write(bytes) => self.writes.borrow_mut().push(RecordedWrite {
+                        phase: if self.dc_is_data.get() {
+                            SpiPhase::Data
+                        } else {
+                            SpiPhase::Command
+                        },
+                        bytes: bytes.to_vec(),
+                    }),
+                    _ => unreachable!("display initialization only writes to SPI"),
+                }
+            }
+            Ok(())
+        }
+    }
+
+    struct Output {
+        state: Rc<Cell<bool>>,
+    }
+
+    impl DigitalErrorType for Output {
+        type Error = Infallible;
+    }
+
+    impl OutputPin for Output {
+        fn set_low(&mut self) -> Result<(), Self::Error> {
+            self.state.set(false);
+            Ok(())
+        }
+
+        fn set_high(&mut self) -> Result<(), Self::Error> {
+            self.state.set(true);
+            Ok(())
+        }
+    }
+
+    struct IdleBusy;
+
+    impl DigitalErrorType for IdleBusy {
+        type Error = Infallible;
+    }
+
+    impl InputPin for IdleBusy {
+        fn is_high(&mut self) -> Result<bool, Self::Error> {
+            Ok(true)
+        }
+
+        fn is_low(&mut self) -> Result<bool, Self::Error> {
+            Ok(false)
+        }
+    }
+
+    struct NoopDelay;
+
+    impl DelayNs for NoopDelay {
+        fn delay_ns(&mut self, _ns: u32) {}
+    }
+
+    fn data_prefix_after_command(writes: &[RecordedWrite], command: u8) -> Vec<u8> {
+        writes
+            .iter()
+            .skip_while(|write| {
+                write.phase == SpiPhase::Data || write.bytes.as_slice() != [command]
+            })
+            .skip(1)
+            .take_while(|write| write.phase == SpiPhase::Data)
+            .flat_map(|write| write.bytes.iter().copied())
+            .take(7)
+            .collect()
+    }
 
     #[test]
     fn epd_size() {
         assert_eq!(WIDTH, 176);
         assert_eq!(HEIGHT, 264);
         assert_eq!(DEFAULT_BACKGROUND_COLOR, Color::White);
+    }
+
+    #[test]
+    fn initialization_uses_waveshare_v1_white_and_black_luts() {
+        let dc_is_data = Rc::new(Cell::new(false));
+        let writes = Rc::new(RefCell::new(Vec::new()));
+        let mut spi = RecordingSpi {
+            dc_is_data: dc_is_data.clone(),
+            writes: writes.clone(),
+        };
+        let dc = Output { state: dc_is_data };
+        let rst = Output {
+            state: Rc::new(Cell::new(false)),
+        };
+        let mut delay = NoopDelay;
+
+        Epd2in7b::new(&mut spi, IdleBusy, dc, rst, &mut delay, None).unwrap();
+
+        let writes = writes.borrow();
+        assert_eq!(
+            data_prefix_after_command(&writes, Command::LutWhiteToBlack as u8),
+            [0x90, 0x1a, 0x1a, 0x00, 0x00, 0x01, 0x40]
+        );
+        assert_eq!(
+            data_prefix_after_command(&writes, Command::LutBlackToBlack as u8),
+            [0x90, 0x1a, 0x1a, 0x00, 0x00, 0x01, 0x20]
+        );
     }
 }
