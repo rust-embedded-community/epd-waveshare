@@ -161,13 +161,12 @@ impl ColorType for HexColor {
     }
 }
 
-
 #[cfg(feature = "graphics")]
 impl From<BinaryColor> for HexColor {
     fn from(b: BinaryColor) -> HexColor {
         match b {
-            BinaryColor::On => HexColor::Black,
-            BinaryColor::Off => HexColor::White,
+            BinaryColor::On => HexColor::White,
+            BinaryColor::Off => HexColor::Black,
         }
     }
 }
