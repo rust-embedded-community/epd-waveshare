@@ -73,18 +73,12 @@ where
         self.cmd_with_data(spi, Command::Ox05, &[0x40, 0x1F, 0x1F, 0x2C])?;
         self.cmd_with_data(spi, Command::Ox06, &[0x6F, 0x1F, 0x17, 0x49])?;
         self.cmd_with_data(spi, Command::Ox08, &[0x6F, 0x1F, 0x1F, 0x22])?;
-        //self.cmd_with_data(spi, Command::IPC, &[0x00, 0x04])?;
         self.cmd_with_data(spi, Command::Ox30, &[0x03])?;
-        //self.cmd_with_data(spi, Command::TSE, &[0x00])?;
         self.cmd_with_data(spi, Command::Ox50, &[0x3F])?;
         self.cmd_with_data(spi, Command::Ox60, &[0x02, 0x00])?;
         self.cmd_with_data(spi, Command::Ox61, &[0x03, 0x20, 0x01, 0xE0])?;
-        //self.cmd_with_data(spi, Command::Ox82, &[0x1E])?;
         self.cmd_with_data(spi, Command::Ox84, &[0x01])?;
-        //self.cmd_with_data(spi, Command::AGID, &[0x00])?;
         self.cmd_with_data(spi, Command::OxE3, &[0x2F])?;
-        //self.cmd_with_data(spi, Command::CCSET, &[0x00])?;
-        //self.cmd_with_data(spi, Command::TSSET, &[0x00])
         self.command(spi, Command::PowerOn)?;
         self.wait_busy_low(delay);
         Ok(())
@@ -124,10 +118,6 @@ where
     }
 
     fn sleep(&mut self, spi: &mut SPI, _delay: &mut DELAY) -> Result<(), <SPI>::Error> {
-        // is this needed?
-        // self.cmd_with_data(spi, Command::PowerOff, &[0x00]).unwrap();
-        // self.wait_busy_low(_delay);
-
         self.cmd_with_data(spi, Command::DeepSleep, &[0xA5])
     }
 
@@ -177,9 +167,6 @@ where
     fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
         self.command(spi, Command::PowerOn)?;
         self.wait_busy_low(delay);
-
-        // is this needed?
-        // self.cmd_with_data(spi, Command::Ox06, &[0x6F, 0x1F, 0x17, 0x49])?;
 
         self.cmd_with_data(spi, Command::DataRefresh, &[0x00])?;
         self.wait_busy_low(delay);
@@ -250,32 +237,23 @@ where
         self.interface.wait_until_idle(delay, true);
     }
 
-    /// Show 7 blocks of color, used for quick testing
-    pub fn show_7block(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
+    /// Show 6 blocks of color, used for quick testing
+    pub fn show_6block(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         let color_6 = [
             HexColor::Black,
             HexColor::White,
-            HexColor::Green,
-            HexColor::Blue,
-            HexColor::Red,
             HexColor::Yellow,
+            HexColor::Red,
+            HexColor::Blue,
+            HexColor::Green,
         ];
 
         self.command(spi, Command::DataStartTransmission)?;
-        for _ in 0..240 {
-            for color in color_6.iter().take(4) {
-                for _ in 0..100 {
+        for color in color_6 {
+            for _y in 0..80 {
+                for _x in 0..400 {
                     self.interface
-                        .data(spi, &[HexColor::colors_byte(*color, *color)])?;
-                }
-            }
-        }
-
-        for _ in 0..240 {
-            for color in color_6.iter().skip(4) {
-                for _ in 0..100 {
-                    self.interface
-                        .data(spi, &[HexColor::colors_byte(*color, *color)])?;
+                        .data(spi, &[HexColor::colors_byte(color, color)])?;
                 }
             }
         }

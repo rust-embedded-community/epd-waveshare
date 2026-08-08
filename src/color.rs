@@ -233,7 +233,7 @@ impl HexColor {
     }
     /// Converts two colors into a single byte for the Display
     pub fn colors_byte(a: HexColor, b: HexColor) -> u8 {
-        a.get_nibble() << 4 | b.get_nibble()
+        (a.get_nibble().reverse_bits() | b.get_nibble().reverse_bits() >> 4).reverse_bits()
     }
 
     ///Take the nibble (lower 4 bits) and convert to an HexColor if possible
