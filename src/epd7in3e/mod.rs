@@ -79,8 +79,6 @@ where
         self.cmd_with_data(spi, Command::Ox61, &[0x03, 0x20, 0x01, 0xE0])?;
         self.cmd_with_data(spi, Command::Ox84, &[0x01])?;
         self.cmd_with_data(spi, Command::OxE3, &[0x2F])?;
-        self.command(spi, Command::PowerOn)?;
-        self.wait_busy_low(delay);
         Ok(())
     }
 }
