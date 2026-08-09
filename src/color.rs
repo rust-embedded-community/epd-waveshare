@@ -68,6 +68,24 @@ pub enum OctColor {
     HiZ = 0x07,
 }
 
+/// For the 6 Color Displays
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum HexColor {
+    /// Black Color
+    Black = 0x00,
+    /// White Color
+    #[default]
+    White = 0x01,
+    /// Yellow Color
+    Yellow = 0x02,
+    /// Red Color
+    Red = 0x03,
+    /// Blue Color
+    Blue = 0x05,
+    /// Green Color
+    Green = 0x06,
+}
+
 /// Color trait for use in `Display`s
 pub trait ColorType {
     /// Number of bit used to represent this color type in a single buffer.
@@ -130,6 +148,121 @@ impl ColorType for OctColor {
         let mask = !(0xF0 >> ((pos % 2) * 4));
         let bits = self.get_nibble() as u16;
         (mask, if pos % 2 == 1 { bits } else { bits << 4 })
+    }
+}
+
+impl ColorType for HexColor {
+    const BITS_PER_PIXEL_PER_BUFFER: usize = 4;
+    const BUFFER_COUNT: usize = 1;
+    fn bitmask(&self, _bwrbit: bool, pos: u32) -> (u8, u16) {
+        let mask = !(0xF0 >> ((pos % 2) * 4));
+        let bits = self.get_nibble() as u16;
+        (mask, if pos % 2 == 1 { bits } else { bits << 4 })
+    }
+}
+
+#[cfg(feature = "graphics")]
+impl From<BinaryColor> for HexColor {
+    fn from(b: BinaryColor) -> HexColor {
+        match b {
+            BinaryColor::On => HexColor::White,
+            BinaryColor::Off => HexColor::Black,
+        }
+    }
+}
+
+#[cfg(feature = "graphics")]
+impl From<HexColor> for embedded_graphics_core::pixelcolor::Rgb888 {
+    fn from(b: HexColor) -> Self {
+        let (r, g, b) = b.rgb();
+        Self::new(r, g, b)
+    }
+}
+
+#[cfg(feature = "graphics")]
+impl From<embedded_graphics_core::pixelcolor::Rgb888> for HexColor {
+    fn from(p: embedded_graphics_core::pixelcolor::Rgb888) -> HexColor {
+        use embedded_graphics_core::prelude::RgbColor;
+        let colors = [
+            HexColor::Black,
+            HexColor::White,
+            HexColor::Yellow,
+            HexColor::Red,
+            HexColor::Blue,
+            HexColor::Green,
+        ];
+        // if the user has already mapped to the right color space, it will just be in the list
+        if let Some(found) = colors.iter().find(|c| c.rgb() == (p.r(), p.g(), p.b())) {
+            return *found;
+        }
+
+        // This is not ideal but just pick the nearest color
+        *colors
+            .iter()
+            .map(|c| (c, c.rgb()))
+            .map(|(c, (r, g, b))| {
+                let dist = (i32::from(r) - i32::from(p.r())).pow(2)
+                    + (i32::from(g) - i32::from(p.g())).pow(2)
+                    + (i32::from(b) - i32::from(p.b())).pow(2);
+                (c, dist)
+            })
+            .min_by_key(|(_c, dist)| *dist)
+            .map(|(c, _)| c)
+            .unwrap_or(&HexColor::White)
+    }
+}
+
+#[cfg(feature = "graphics")]
+impl From<embedded_graphics_core::pixelcolor::raw::RawU4> for HexColor {
+    fn from(b: embedded_graphics_core::pixelcolor::raw::RawU4) -> Self {
+        use embedded_graphics_core::prelude::RawData;
+        HexColor::from_nibble(b.into_inner()).unwrap()
+    }
+}
+
+#[cfg(feature = "graphics")]
+impl PixelColor for HexColor {
+    type Raw = embedded_graphics_core::pixelcolor::raw::RawU4;
+}
+
+impl HexColor {
+    /// Gets the Nibble representation of the Color as needed by the display
+    pub fn get_nibble(self) -> u8 {
+        self as u8
+    }
+    /// Converts two colors into a single byte for the Display
+    pub fn colors_byte(a: HexColor, b: HexColor) -> u8 {
+        (a.get_nibble().reverse_bits() | b.get_nibble().reverse_bits() >> 4).reverse_bits()
+    }
+
+    ///Take the nibble (lower 4 bits) and convert to an HexColor if possible
+    pub fn from_nibble(nibble: u8) -> Result<HexColor, OutOfColorRangeParseError> {
+        match nibble & 0xf {
+            0x00 => Ok(HexColor::Black),
+            0x01 => Ok(HexColor::White),
+            0x02 => Ok(HexColor::Yellow),
+            0x03 => Ok(HexColor::Red),
+            0x05 => Ok(HexColor::Blue),
+            0x06 => Ok(HexColor::Green),
+            e => Err(OutOfColorRangeParseError(e)),
+        }
+    }
+    ///Split the nibbles of a single byte and convert both to an HexColor if possible
+    pub fn split_byte(byte: u8) -> Result<(HexColor, HexColor), OutOfColorRangeParseError> {
+        let low = HexColor::from_nibble(byte & 0xf)?;
+        let high = HexColor::from_nibble((byte >> 4) & 0xf)?;
+        Ok((high, low))
+    }
+    /// Converts to limited range of RGB values.
+    pub fn rgb(self) -> (u8, u8, u8) {
+        match self {
+            HexColor::White => (0xff, 0xff, 0xff),
+            HexColor::Black => (0x00, 0x00, 0x00),
+            HexColor::Green => (0x00, 0xff, 0x00),
+            HexColor::Blue => (0x00, 0x00, 0xff),
+            HexColor::Red => (0xff, 0x00, 0x00),
+            HexColor::Yellow => (0xff, 0xff, 0x00),
+        }
     }
 }
 
