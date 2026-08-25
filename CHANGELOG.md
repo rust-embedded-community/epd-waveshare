@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add support for the 4.2 inch 3 color (B/C) display, in both the red (B) and yellow (C) pigments
+
 ## [v0.6.0] - 2024-10-28
 
 ### Added

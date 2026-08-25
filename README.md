@@ -60,6 +60,7 @@ epd4in2.sleep(&mut spi, &mut delay)
 | [7.3 Inch HAT (F)](https://www.waveshare.com/product/7.3inch-e-paper-hat-f.htm) | Black, White, Red, Green, Blue, Yellow, Orange | ✕ | ✕ | ✔ | ✔ |
 | [5.83 Inch B/W/R (b)](https://www.waveshare.com/5.83inch-e-Paper-B.htm) | Black, White, Red | ✕ | Not officially | ✔ | ✔ |
 | [5.65 Inch 7 Color (F)](https://www.waveshare.com/5.65inch-e-paper-module-f.htm) | Black, White, Red, Green, Blue, Yellow, Orange | ✕ | ✕ | ✔ | ✔ |
+| [4.2 Inch 3 Color (B/C)](https://www.waveshare.com/4.2inch-e-paper-module-c.htm) | Black, White, Red or Yellow | ✕ | ✕ | ✔ | ✔ |
 | [4.2 Inch B/W (A)](https://www.waveshare.com/product/4.2inch-e-paper-module.htm) | Black, White | ✕ | Not officially [[2](#2-42-inch-e-ink-blackwhite---partial-refresh)] | ✔ | ✔ |
 | [2.13 Inch B/W (A) V2](https://www.waveshare.com/product/2.13inch-e-paper-hat.htm) | Black, White | ✕ | ✔ | ✔  | ✔  |
 | [2.13 Inch B/W/R (B/C) V2](https://www.waveshare.com/product/raspberry-pi/displays/e-paper/2.13inch-e-paper-hat-b.htm) | Black, White, Red | ✕ | ✕ | ✔  | ✔  |
