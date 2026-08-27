@@ -25,7 +25,7 @@ embedded-hal-mock = { version = "0.11", default-features = false, features = [
 ] }
 
 [target.'cfg(unix)'.dev-dependencies]
-linux-embedded-hal = "0.4.0"
+linux-embedded-hal = "0.5.0"
 
 [[example]]
 name = "epd1in54_no_graphics"
