@@ -118,6 +118,7 @@ pub struct Epd2in9<SPI, BUSY, DC, RST, DELAY> {
     background_color: Color,
     /// Refresh LUT
     refresh: RefreshLut,
+    partial_init: bool,
 }
 
 impl<SPI, BUSY, DC, RST, DELAY> Epd2in9<SPI, BUSY, DC, RST, DELAY>
@@ -204,6 +205,7 @@ where
             interface,
             background_color: DEFAULT_BACKGROUND_COLOR,
             refresh: RefreshLut::Full,
+            partial_init: false,
         };
 
         epd.init(spi, delay)?;
@@ -230,6 +232,7 @@ where
         buffer: &[u8],
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
+        self.partial_init = false;
         self.wait_until_idle(spi, delay)?;
         self.interface.cmd_with_data(spi, Command::WriteRam, buffer)
     }
@@ -244,7 +247,10 @@ where
         width: u32,
         height: u32,
     ) -> Result<(), SPI::Error> {
-        //TODO This is copied from epd2in9 but it seems not working. Partial refresh supported by version 2?
+        if !self.partial_init {
+            self.set_lut_helper(spi, delay, &LUT_PARTIAL_2IN9)?;
+            self.partial_init = true;
+        }
         self.wait_until_idle(spi, delay)?;
         self.set_ram_area(spi, x, y, x + width, y + height)?;
         self.set_ram_counter(spi, delay, x, y)?;
@@ -259,7 +265,7 @@ where
         self.wait_until_idle(spi, delay)?;
         // Enable clock signal, Enable Analog, Load temperature value, DISPLAY with DISPLAY Mode 1, Disable Analog, Disable OSC
         self.interface
-            .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xC7])?;
+            .cmd_with_data(spi, Command::DisplayUpdateControl2, &[0xCC])?;
         self.interface.cmd(spi, Command::MasterActivation)?;
         self.wait_until_idle(spi, delay)?;
         Ok(())

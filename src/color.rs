@@ -103,6 +103,18 @@ impl ColorType for Color {
     }
 }
 
+impl ColorType for BinaryColor {
+    const BITS_PER_PIXEL_PER_BUFFER: usize = 1;
+    const BUFFER_COUNT: usize = 1;
+    fn bitmask(&self, _bwrbit: bool, pos: u32) -> (u8, u16) {
+        let bit = 0x80 >> (pos % 8);
+        match self {
+            BinaryColor::On => (!bit, 0u16),
+            BinaryColor::Off => (!bit, bit as u16),
+        }
+    }
+}
+
 impl ColorType for TriColor {
     const BITS_PER_PIXEL_PER_BUFFER: usize = 1;
     const BUFFER_COUNT: usize = 2;
