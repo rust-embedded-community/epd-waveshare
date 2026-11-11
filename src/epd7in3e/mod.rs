@@ -157,15 +157,40 @@ where
 
     fn update_partial_frame(
         &mut self,
-        _spi: &mut SPI,
-        _delay: &mut DELAY,
-        _buffer: &[u8],
-        _x: u32,
-        _y: u32,
-        _width: u32,
-        _height: u32,
+        spi: &mut SPI,
+        delay: &mut DELAY,
+        buffer: &[u8],
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
     ) -> Result<(), <SPI>::Error> {
-        unimplemented!()
+        assert!(width > 0 && height > 0);
+        assert!(matches!(x.checked_add(width), Some(end) if end <= WIDTH));
+        assert!(matches!(y.checked_add(height), Some(end) if end <= HEIGHT));
+        assert_eq!(buffer.len(), (((width + 1) / 2) * height) as usize);
+
+        let x_end = x + width - 1;
+        let y_end = y + height - 1;
+
+        self.wait_until_idle(spi, delay)?;
+        self.cmd_with_data(
+            spi,
+            Command::PartialWindow,
+            &[
+                (x >> 8) as u8,
+                x as u8,
+                (x_end >> 8) as u8,
+                x_end as u8,
+                (y >> 8) as u8,
+                y as u8,
+                (y_end >> 8) as u8,
+                y_end as u8,
+                0x01,
+            ],
+        )?;
+        self.cmd_with_data(spi, Command::DataStartTransmission, &[0x00])?;
+        self.interface.data(spi, buffer)
     }
 
     fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {
@@ -209,7 +234,7 @@ where
         _delay: &mut DELAY,
         _refresh_rate: Option<crate::traits::RefreshLut>,
     ) -> Result<(), <SPI>::Error> {
-        unimplemented!()
+        Ok(())
     }
 
     fn wait_until_idle(&mut self, _spi: &mut SPI, delay: &mut DELAY) -> Result<(), <SPI>::Error> {

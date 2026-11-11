@@ -29,6 +29,7 @@ pub(crate) enum Command {
     Ox60 = 0x60,
     Ox61 = 0x61,
 
+    PartialWindow = 0x83,
     Ox84 = 0x84,
 
     CMDH = 0xAA,
