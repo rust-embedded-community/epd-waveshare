@@ -47,6 +47,10 @@ required-features = ["linux-dev"]
 name = "epd4in2"
 required-features = ["linux-dev"]
 
+[[example]]
+name = "epd7in3e"
+required-features = ["graphics", "linux-dev"]
+
 [features]
 # Remove the linux-dev feature to build the tests on non  unix systems
 default = ["graphics", "linux-dev", "epd2in13_v3"]
