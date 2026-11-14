@@ -171,34 +171,40 @@ impl From<HexColor> for embedded_graphics_core::pixelcolor::Rgb888 {
 
 #[cfg(feature = "graphics")]
 impl From<embedded_graphics_core::pixelcolor::Rgb888> for HexColor {
+    // Reference: https://www.waveshare.com/wiki/7.3inch_e-Paper_HAT_(E)_Manual#Image_Data_Conversion
+    // function: converterTo6color.cpp
+    // https://files.waveshare.com/wiki/common/ConverterTocolor.zip
     fn from(p: embedded_graphics_core::pixelcolor::Rgb888) -> HexColor {
         use embedded_graphics_core::prelude::RgbColor;
+
         let colors = [
             HexColor::Black,
             HexColor::White,
-            HexColor::Green,
-            HexColor::Blue,
-            HexColor::Red,
             HexColor::Yellow,
+            HexColor::Red,
+            HexColor::Blue,
+            HexColor::Green,
         ];
-        // if the user has already mapped to the right color space, it will just be in the list
-        if let Some(found) = colors.iter().find(|c| c.rgb() == (p.r(), p.g(), p.b())) {
-            return *found;
+
+        let mut mindiff = i32::MAX;
+        let mut bestc = HexColor::Black;
+
+        for color in colors {
+            let (r, g, b) = color.rgb();
+
+            let diffr = i32::from(p.r()) - i32::from(r);
+            let diffg = i32::from(p.g()) - i32::from(g);
+            let diffb = i32::from(p.b()) - i32::from(b);
+
+            let diff = diffr * diffr + diffg * diffg + diffb * diffb;
+
+            if diff < mindiff {
+                mindiff = diff;
+                bestc = color;
+            }
         }
 
-        // This is not ideal but just pick the nearest color
-        *colors
-            .iter()
-            .map(|c| (c, c.rgb()))
-            .map(|(c, (r, g, b))| {
-                let dist = (i32::from(r) - i32::from(p.r())).pow(2)
-                    + (i32::from(g) - i32::from(p.g())).pow(2)
-                    + (i32::from(b) - i32::from(p.b())).pow(2);
-                (c, dist)
-            })
-            .min_by_key(|(_c, dist)| *dist)
-            .map(|(c, _)| c)
-            .unwrap_or(&HexColor::White)
+        bestc
     }
 }
 
@@ -246,12 +252,12 @@ impl HexColor {
     /// Converts to limited range of RGB values.
     pub fn rgb(self) -> (u8, u8, u8) {
         match self {
-            HexColor::White => (0xff, 0xff, 0xff),
-            HexColor::Black => (0x00, 0x00, 0x00),
-            HexColor::Green => (0x00, 0xff, 0x00),
-            HexColor::Blue => (0x00, 0x00, 0xff),
-            HexColor::Red => (0xff, 0x00, 0x00),
-            HexColor::Yellow => (0xff, 0xff, 0x00),
+            HexColor::Black => (0, 0, 0),
+            HexColor::White => (255, 255, 255),
+            HexColor::Yellow => (255, 243, 56),
+            HexColor::Red => (191, 0, 0),
+            HexColor::Blue => (100, 64, 255),
+            HexColor::Green => (67, 138, 28),
         }
     }
 }
